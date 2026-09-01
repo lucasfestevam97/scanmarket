@@ -332,7 +332,7 @@ if st.session_state.get("connected"):
     st.session_state.logado = True
 
 # ==========================================
-# 5. Estilização CSS Geral e Overlay da Câmera
+# 5. Estilização CSS e Scripts JS (Orientação & Câmera Traseira)
 # ==========================================
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
@@ -391,6 +391,11 @@ st.markdown(f"""
         box-shadow: 0px 4px 15px rgba(0,0,0,0.4);
     }}
     
+    /* Esconde o botão de alternar câmera do Streamlit se disponível para forçar a traseira */
+    button[title="Switch camera"], button[aria-label="Switch camera"] {{
+        display: none !important;
+    }}
+
     /* Linha vermelha central */
     div[data-testid="stCameraInput"]::after {{
         content: "";
@@ -420,6 +425,45 @@ st.markdown(f"""
     }}
     </style>
 """, unsafe_allow_html=True)
+
+# Script JS: Trava orientação da tela (Retrato) + Força Câmera Traseira (facingMode: environment)
+st.components.v1.html("""
+<script>
+    // 1. Configuração de Rotação de Tela (Força Modo Portrait/Em pé)
+    async function lockOrientation() {
+        try {
+            if (screen.orientation && screen.orientation.lock) {
+                await screen.orientation.lock('portrait');
+            }
+        } catch (e) {
+            console.log("Bloqueio de orientação de tela não suportado ou bloqueado pelo navegador.");
+        }
+    }
+    lockOrientation();
+
+    // 2. Override no getUserMedia para forçar CÂMERA TRASEIRA (environment) e remover botão de troca
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = function(constraints) {
+            if (constraints && constraints.video) {
+                if (typeof constraints.video === 'object') {
+                    constraints.video.facingMode = { exact: "environment" };
+                } else {
+                    constraints.video = { facingMode: { ideal: "environment" } };
+                }
+            }
+            return originalGetUserMedia(constraints).catch(err => {
+                // Caso a câmera com "exact environment" falhe, tenta fallback para ideal "environment"
+                if (constraints && constraints.video && constraints.video.facingMode && constraints.video.facingMode.exact) {
+                    constraints.video.facingMode = "environment";
+                    return originalGetUserMedia(constraints);
+                }
+                throw err;
+            });
+        };
+    }
+</script>
+""", height=0)
 
 def reproduzir_bip():
     sound_js = """<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg"></audio>"""
