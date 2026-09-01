@@ -7,7 +7,6 @@ import cv2
 import numpy as np
 import requests
 import pandas as pd
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
 from streamlit_google_auth import Authenticate
 
 # ==========================================
@@ -51,13 +50,8 @@ try:
 except Exception:
     pass
 
-# Servidores STUN públicos da Google para estabilizar conexão WebRTC em celulares
-RTC_CONFIG = RTCConfiguration({
-    "iceServers": [
-        {"urls": ["stun:stun.l.google.com:19302"]},
-        {"urls": ["stun:stun1.l.google.com:19302"]}
-    ]
-})
+# Detector de código de barras OpenCV
+barcode_detector = cv2.barcode.BarcodeDetector()
 
 # ==========================================
 # 2. Carregamento do Banco de Dados (.xlsx)
@@ -118,7 +112,7 @@ TRADUCOES = {
         "gasto_mensal": "Gasto no Período",
         "limite_definido": "Limite Definido",
         "alerta_limite": "⚠️ Você ultrapassou seu limite!",
-        "voltar": "❌ Cancelar / Voltar",
+        "voltar": "Cancelar",
         "abrir_camera": "Escanear produto",
         "digitar_manual": "⌨️ Digitar Código Manualmente",
         "digitar_placeholder": "Insira o código de barras...",
@@ -157,7 +151,8 @@ TRADUCOES = {
         "ver_grafico": "📊 Ver Histórico Visual (Gráfico)",
         "voltar_historico": "⬅️ Voltar ao Histórico",
         "msg_sucesso": "Parabéns, você gastou menos que no período anterior",
-        "msg_alerta": "Você gastou um pouco mais ultimamente."
+        "msg_alerta": "Você gastou um pouco mais ultimamente.",
+        "instrucao_camera": "Posicione a linha vermelha sobre o código de barras."
     },
     "ES": {
         "escanear": "📷 Escanear",
@@ -168,7 +163,7 @@ TRADUCOES = {
         "gasto_mensal": "Gasto del Período",
         "limite_definido": "Límite Definido",
         "alerta_limite": "⚠️ ¡Has superado tu límite!",
-        "voltar": "❌ Cancelar / Salir",
+        "voltar": "Cancelar",
         "abrir_camera": "Escanear producto",
         "digitar_manual": "⌨️ Ingresar Código Manualmente",
         "digitar_placeholder": "Ingrese el código...",
@@ -207,7 +202,8 @@ TRADUCOES = {
         "ver_grafico": "📊 Ver Historial Visual (Gráfico)",
         "voltar_historico": "⬅️ Volver al Historial",
         "msg_sucesso": "Felicitaciones, gastaste menos que antes",
-        "msg_alerta": "Has gastado un poco más últimamente."
+        "msg_alerta": "Has gastado un poco más últimamente.",
+        "instrucao_camera": "Posicione la línea roja sobre el código de barras."
     },
     "EN": {
         "escanear": "📷 Scan",
@@ -218,8 +214,8 @@ TRADUCOES = {
         "gasto_mensal": "Period Spending",
         "limite_definido": "Set Limit",
         "alerta_limite": "⚠️ You have exceeded your limit!",
-        "voltar": "❌ Cancel / Exit",
-        "abrir_camera": "Escanear produto",
+        "voltar": "Cancel",
+        "abrir_camera": "Scan product",
         "digitar_manual": "⌨️ Enter Code Manually",
         "digitar_placeholder": "Enter barcode...",
         "buscar_codigo": "Search Product",
@@ -257,37 +253,15 @@ TRADUCOES = {
         "ver_grafico": "📊 View Visual History (Chart)",
         "voltar_historico": "⬅️ Back to History",
         "msg_sucesso": "Congratulations, you spent less than before",
-        "msg_alerta": "You spent a bit more recently."
+        "msg_alerta": "You spent a bit more recently.",
+        "instrucao_camera": "Position the red line over the barcode."
     }
 }
 
 SIMBOLOS = {"BRL": "R$", "USD": "$", "ARS": "$"}
 
 # ==========================================
-# 4. Processador OpenCV com Linha Vermelha de Banco
-# ==========================================
-barcode_detector = cv2.barcode.BarcodeDetector()
-
-class BarcodeScannerWithRedLine(VideoProcessorBase):
-    def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        h, w, _ = img.shape
-
-        ok, decoded_info, _, _ = barcode_detector.detectAndDecode(img)
-        if ok and decoded_info:
-            for info in decoded_info:
-                if info and info != st.session_state.ultimo_codigo:
-                    st.session_state.ultimo_codigo = info
-                    st.session_state.abrir_camera = False
-                    st.session_state.tocar_som = True
-
-        cy = h // 2
-        cv2.line(img, (int(w * 0.1), cy), (int(w * 0.9), cy), (0, 0, 255), 4)
-
-        return frame.from_ndarray(img, format="bgr24")
-
-# ==========================================
-# 5. Estados da Sessão
+# 4. Estados da Sessão
 # ==========================================
 if "logado" not in st.session_state:
     st.session_state.logado = False
@@ -358,7 +332,7 @@ if st.session_state.get("connected"):
     st.session_state.logado = True
 
 # ==========================================
-# 6. Estilização CSS
+# 5. Estilização CSS Geral e Overlay da Câmera
 # ==========================================
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
@@ -407,6 +381,43 @@ st.markdown(f"""
         padding: 6px 0;
         font-size: 0.85rem;
     }}
+
+    /* CSS do Scanner Estilo Foto Exemplo */
+    div[data-testid="stCameraInput"] {{
+        position: relative;
+        border: 2px solid #555555;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.4);
+    }}
+    
+    /* Linha vermelha central */
+    div[data-testid="stCameraInput"]::after {{
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 5%;
+        right: 5%;
+        height: 3px;
+        background-color: #ff0000;
+        box-shadow: 0 0 8px rgba(255, 0, 0, 0.9);
+        z-index: 10;
+        pointer-events: none;
+    }}
+
+    /* Moldura de enquadramento amarela */
+    div[data-testid="stCameraInput"]::before {{
+        content: "";
+        position: absolute;
+        top: 22%;
+        bottom: 22%;
+        left: 6%;
+        right: 6%;
+        border: 2px solid #ffcc00;
+        border-radius: 8px;
+        z-index: 9;
+        pointer-events: none;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -415,45 +426,34 @@ def reproduzir_bip():
     st.components.v1.html(sound_js, height=0)
 
 # ==========================================
-# 7. Modo Scanner
+# 6. Modo Scanner Nativo (Sem WebRTC)
 # ==========================================
 if st.session_state.abrir_camera:
-    st.subheader("📷 Leitor de Código de Barras")
-    st.caption("Centralize a linha vermelha sobre as barras do produto.")
-
-    webrtc_streamer(
-        key="scanner_stream",
-        mode=WebRtcMode.SENDRECV,
-        rtc_configuration=RTC_CONFIG,
-        video_processor_factory=BarcodeScannerWithRedLine,
-        media_stream_constraints={
-            "video": {"facingMode": "environment"},
-            "audio": False
-        },
-        async_processing=True,
-    )
-
-    st.divider()
+    st.markdown(f"<p style='text-align:center; font-weight:600; font-size:1.1rem;'>{t['instrucao_camera']}</p>", unsafe_allow_html=True)
     
-    # Fallback: Tirar foto com a câmera padrão do celular
-    st.caption("Alternativa: Tire uma foto do código de barras se a transmissão falhar:")
-    foto = st.camera_input("Tirar foto do código de barras")
-    if foto is not None:
-        bytes_data = foto.getvalue()
-        cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
-        ok, decoded_info, _, _ = barcode_detector.detectAndDecode(cv2_img)
-        if ok and decoded_info:
-            for info in decoded_info:
-                if info:
-                    st.session_state.ultimo_codigo = info
-                    st.session_state.abrir_camera = False
-                    st.session_state.tocar_som = True
-                    st.rerun()
-        else:
-            st.warning("Não foi possível ler o código na foto. Tente aproximar ou focar melhor.")
+    foto_capturada = st.camera_input("Scanner", key="camera_scanner", label_visibility="collapsed")
 
-    st.divider()
-    if st.button(t["voltar"], width="stretch"):
+    if foto_capturada is not None:
+        bytes_data = foto_capturada.getvalue()
+        img_np = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+        
+        ok, decoded_info, _, _ = barcode_detector.detectAndDecode(img_np)
+        
+        if ok and decoded_info:
+            codigo_encontrado = [c for c in decoded_info if c]
+            if codigo_encontrado:
+                st.session_state.ultimo_codigo = codigo_encontrado[0]
+                st.session_state.abrir_camera = False
+                st.session_state.tocar_som = True
+                st.rerun()
+            else:
+                st.error("Não foi possível decodificar o código. Tente focar melhor e tire a foto novamente.")
+        else:
+            st.error("Nenhum código de barras detectado. Alinhe a linha vermelha ao código e tente novamente.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    if st.button(t["voltar"], type="secondary", use_container_width=True):
         st.session_state.abrir_camera = False
         st.rerun()
 
@@ -494,7 +494,7 @@ else:
             reproduzir_bip()
             st.session_state.tocar_som = False
 
-        if st.button(t["abrir_camera"], width="stretch", type="primary"):
+        if st.button(t["abrir_camera"], use_container_width=True, type="primary"):
             st.session_state.abrir_camera = True
             st.rerun()
 
@@ -502,7 +502,7 @@ else:
 
         with st.expander(t["digitar_manual"], expanded=False):
             codigo_manual = st.text_input(t["digitar_placeholder"], key="input_manual")
-            if st.button(t["buscar_codigo"], width="stretch"):
+            if st.button(t["buscar_codigo"], use_container_width=True):
                 if codigo_manual.strip():
                     st.session_state.ultimo_codigo = codigo_manual.strip()
                     st.rerun()
@@ -529,7 +529,7 @@ else:
                 qtd = st.number_input(t["quantidade"], min_value=1, max_value=99, value=1, step=1)
                 st.markdown('</div>', unsafe_allow_html=True)
                 
-                if st.button(t["add_carrinho"], width="stretch", type="primary"):
+                if st.button(t["add_carrinho"], use_container_width=True, type="primary"):
                     st.session_state.carrinho.append({
                         "codigo": codigo,
                         "nome": prod_info["nome"],
@@ -562,7 +562,7 @@ else:
                 st.warning(t["msg_alerta"])
 
             st.divider()
-            if st.button(t["voltar_historico"], width="stretch"):
+            if st.button(t["voltar_historico"], use_container_width=True):
                 st.session_state.tela_grafico = False
                 st.rerun()
 
@@ -587,7 +587,7 @@ else:
                     
                 st.metric(label=t["total_compra"], value=fmt_moeda(total_brl))
                 
-                if st.button(t["finalizar"], width="stretch", type="primary"):
+                if st.button(t["finalizar"], use_container_width=True, type="primary"):
                     agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
                     st.session_state.gasto_atual_brl += total_brl
                     
@@ -605,7 +605,7 @@ else:
 
             st.subheader(t["historico_secao"])
             
-            if st.button(t["ver_grafico"], width="stretch"):
+            if st.button(t["ver_grafico"], use_container_width=True):
                 st.session_state.tela_grafico = True
                 st.rerun()
 
@@ -639,13 +639,13 @@ else:
                 st.caption(user_info.get('email', ''))
 
             st.divider()
-            if st.button(t["sair"], width="stretch"):
+            if st.button(t["sair"], use_container_width=True):
                 authenticator.logout()
                 st.rerun()
 
         elif st.session_state.logado:
             st.write(f"{t['conectado']}: **{st.session_state.usuario_atual}**")
-            if st.button(t["sair"], width="stretch"):
+            if st.button(t["sair"], use_container_width=True):
                 st.session_state.logado = False
                 st.session_state.usuario_atual = "Visitante"
                 st.rerun()
@@ -665,7 +665,7 @@ else:
             with sub_entrar:
                 u = st.text_input(t["usuario"], key="u_login")
                 s = st.text_input(t["senha"], type="password", key="s_login")
-                if st.button(t["entrar_btn"], width="stretch", type="primary"):
+                if st.button(t["entrar_btn"], use_container_width=True, type="primary"):
                     if u in st.session_state.usuarios and st.session_state.usuarios[u] == s:
                         st.session_state.logado = True
                         st.session_state.usuario_atual = u
@@ -678,7 +678,7 @@ else:
                 ns = st.text_input(t["senha"], type="password", key="s_cad")
                 cs = st.text_input(t["conf_senha"], type="password", key="c_cad")
                 
-                if st.button(t["cadastrar_btn"], width="stretch", type="primary"):
+                if st.button(t["cadastrar_btn"], use_container_width=True, type="primary"):
                     if not nu or not ns:
                         st.warning("Preencha todos os campos.")
                     elif nu in st.session_state.usuarios:
@@ -745,7 +745,7 @@ else:
             index=prazos_opcoes.index(st.session_state.prazo_dias)
         )
 
-        if st.button(t["salvar_limite"], width="stretch"):
+        if st.button(t["salvar_limite"], use_container_width=True):
             st.session_state.limite_mensal_brl = novo_limite
             st.session_state.prazo_dias = novo_prazo
             st.success(t["limite_salvo"])
@@ -753,7 +753,7 @@ else:
 
         st.divider()
 
-        if st.button(t["zerar_gastos"], width="stretch"):
+        if st.button(t["zerar_gastos"], use_container_width=True):
             st.session_state.gasto_atual_brl = 0.00
             st.success(t["gastos_zerados"])
             st.rerun()
