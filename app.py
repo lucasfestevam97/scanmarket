@@ -3,8 +3,9 @@ import cv2
 import numpy as np
 import requests
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
+from streamlit_google_auth import Authenticate
 
-# 1. Configuração Mobile
+# 1. Configuração Mobile da Página
 st.set_page_config(
     page_title="Scan Market",
     page_icon="🛒",
@@ -12,7 +13,20 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. Cotações Diárias
+# 2. Configuração do Autenticador do Google
+# O arquivo 'client_secret.json' precisa estar na mesma pasta deste arquivo
+authenticator = Authenticate(
+    secret_credentials_path='client_secret.json',
+    cookie_name='scanmarket_google_cookie',
+    cookie_key='chave_secreta_scanmarket_123',
+    cookie_expiry_days=30,
+    redirect_uri='http://localhost:8501'
+)
+
+# Verifica a sessão do Google ao carregar a página
+authenticator.check_authentification()
+
+# 3. Cotações Diárias das Moedas (API Externa)
 @st.cache_data(ttl=3600)
 def obter_cotacoes():
     try:
@@ -27,7 +41,7 @@ def obter_cotacoes():
 
 cotacoes = obter_cotacoes()
 
-# 3. Dicionário Completo de Idiomas
+# 4. Dicionário Completo de Idiomas
 TRADUCOES = {
     "PT": {
         "escanear": "📷 Escanear",
@@ -67,8 +81,7 @@ TRADUCOES = {
         "entrar_btn": "Entrar",
         "cadastrar_btn": "Cadastrar",
         "ou_social": "Ou entre com",
-        "entrar_google": "Continuar com Google",
-        "entrar_facebook": "Continuar com Facebook",
+        "entrar_google": "Entrar com Google (Gmail)",
         "sair": "🔴 Sair da Conta",
         "conectado": "Conectado como",
         "limite_salvo": "Novo limite mensal salvo com sucesso!"
@@ -111,8 +124,7 @@ TRADUCOES = {
         "entrar_btn": "Entrar",
         "cadastrar_btn": "Registrarse",
         "ou_social": "O ingresa con",
-        "entrar_google": "Continuar con Google",
-        "entrar_facebook": "Continuar con Facebook",
+        "entrar_google": "Continuar con Google (Gmail)",
         "sair": "🔴 Cerrar Sesión",
         "conectado": "Conectado como",
         "limite_salvo": "¡Nuevo límite mensual guardado!"
@@ -155,8 +167,7 @@ TRADUCOES = {
         "entrar_btn": "Log In",
         "cadastrar_btn": "Sign Up",
         "ou_social": "Or continue with",
-        "entrar_google": "Continue with Google",
-        "entrar_facebook": "Continue with Facebook",
+        "entrar_google": "Continue with Google (Gmail)",
         "sair": "🔴 Log Out",
         "conectado": "Connected as",
         "limite_salvo": "New monthly limit saved successfully!"
@@ -165,10 +176,10 @@ TRADUCOES = {
 
 SIMBOLOS = {"BRL": "R$", "USD": "$", "ARS": "$"}
 
-# 4. Detector de Código de Barras
+# 5. Detector de Código de Barras OpenCV
 barcode_detector = cv2.barcode.BarcodeDetector()
 
-# 5. Estados do App
+# 6. Estados do Aplicativo
 if "logado" not in st.session_state:
     st.session_state.logado = False
 if "usuario_atual" not in st.session_state:
@@ -176,6 +187,7 @@ if "usuario_atual" not in st.session_state:
 if "usuarios" not in st.session_state:
     st.session_state.usuarios = {"admin": "1234"}
 
+# Configurações de Aparência e Idioma
 if "tema" not in st.session_state:
     st.session_state.tema = "Claro"
 if "idioma" not in st.session_state:
@@ -183,6 +195,7 @@ if "idioma" not in st.session_state:
 if "moeda" not in st.session_state:
     st.session_state.moeda = "BRL"
 
+# Leitor e Câmera
 if "ultimo_codigo" not in st.session_state:
     st.session_state.ultimo_codigo = None
 if "abrir_camera" not in st.session_state:
@@ -190,6 +203,7 @@ if "abrir_camera" not in st.session_state:
 if "tocar_som" not in st.session_state:
     st.session_state.tocar_som = False
 
+# Carrinho e Orçamento
 if "carrinho" not in st.session_state:
     st.session_state.carrinho = []
 if "limite_mensal_brl" not in st.session_state:
@@ -205,7 +219,13 @@ def fmt_moeda(valor_brl):
 
 t = TRADUCOES[st.session_state.idioma]
 
-# 6. Detector WebRTC
+# 7. Sincronização do Usuário com Google Login
+if st.session_state.get("connected"):
+    user_info = st.session_state.get("user_info", {})
+    st.session_state.usuario_atual = user_info.get("name", user_info.get("email", "Usuário Google"))
+    st.session_state.logado = True
+
+# 8. Detector WebRTC
 class BarcodeScanner(VideoProcessorBase):
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
@@ -218,7 +238,7 @@ class BarcodeScanner(VideoProcessorBase):
                     st.session_state.tocar_som = True
         return frame.from_ndarray(img, format="bgr24")
 
-# 7. CSS + Botões Sociais
+# 9. Estilização CSS e Bottom Bar
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
 card_bg = "#1E1E1E" if is_dark else "#FFFFFF"
@@ -245,25 +265,8 @@ st.markdown(f"""
         margin-bottom: 15px;
     }}
     .price-tag {{ font-size: 1.6rem; font-weight: 800; color: #2E7D32; margin: 4px 0; }}
-    
-    /* Botões Sociais */
-    .btn-social {{
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        width: 100%;
-        padding: 10px;
-        border-radius: 8px;
-        font-weight: 600;
-        margin-bottom: 10px;
-        text-decoration: none;
-        cursor: pointer;
-    }}
-    .btn-google {{ background-color: #FFFFFF; color: #000; border: 1px solid #CCC; }}
-    .btn-facebook {{ background-color: #1877F2; color: #FFF; border: none; }}
 
-    /* Bottom Bar */
+    /* Bottom Bar Fixa */
     div[data-baseweb="tab-list"] {{
         position: fixed;
         bottom: 0; left: 50%;
@@ -283,7 +286,7 @@ def reproduzir_bip():
     sound_js = """<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg"></audio>"""
     st.components.v1.html(sound_js, height=0)
 
-# 8. Abas
+# 10. Abas Inferiores
 tab_scanner, tab_carrinho, tab_historico, tab_perfil, tab_config = st.tabs([
     t["escanear"], t["carrinho"], t["historico"], t["perfil"], t["config"]
 ])
@@ -389,18 +392,41 @@ with tab_historico:
     st.subheader(t["historico"])
     st.caption(t["historico_vazio"])
 
-# --- ABA 4: PERFIL & LOGIN SOCIAL ---
+# --- ABA 4: PERFIL & LOGIN GOOGLE OFICIAL ---
 with tab_perfil:
     st.subheader(t["perfil"])
     
-    if st.session_state.logado:
+    # 1. Caso esteja Logado via Google (OAuth)
+    if st.session_state.get("connected"):
+        user_info = st.session_state.get("user_info", {})
+        
+        col_pic, col_details = st.columns([1, 3])
+        with col_pic:
+            if "picture" in user_info:
+                st.image(user_info["picture"], width=70)
+        with col_details:
+            st.markdown(f"**{user_info.get('name', 'Usuário')}**")
+            st.caption(user_info.get('email', ''))
+
+        st.divider()
+        authenticator.logout(button_name=t["sair"], key="logout_google_btn")
+
+    # 2. Caso esteja Logado via Login Tradicional
+    elif st.session_state.logado:
         st.write(f"{t['conectado']}: **{st.session_state.usuario_atual}**")
         if st.button(t["sair"], use_container_width=True):
             st.session_state.logado = False
             st.session_state.usuario_atual = "Visitante"
             st.rerun()
+
+    # 3. Opções para Fazer Login
     else:
         st.write(f"**{t['login_opcional']}**")
+        
+        # Botão Oficial de Login do Google
+        st.write(f"**{t['ou_social']}**")
+        authenticator.login(color="blue", justification_content="center")
+        st.divider()
         
         sub_entrar, sub_criar = st.tabs([t["entrar_aba"], t["criar_aba"]])
         
@@ -413,7 +439,7 @@ with tab_perfil:
                     st.session_state.usuario_atual = u
                     st.rerun()
                 else:
-                    st.error("Erro ao conectar.")
+                    st.error("Usuário ou senha incorretos.")
                     
         with sub_criar:
             nu = st.text_input(t["usuario"], key="u_cad")
@@ -429,22 +455,7 @@ with tab_perfil:
                     st.error("As senhas não coincidem.")
                 else:
                     st.session_state.usuarios[nu] = ns
-                    st.success("Conta criada! Faça login.")
-            
-            st.divider()
-            st.caption(f"**{t['ou_social']}**")
-            
-            # Botão Google com SVG
-            if st.button("🌐 " + t["entrar_google"], use_container_width=True):
-                st.session_state.logado = True
-                st.session_state.usuario_atual = "Usuário Google"
-                st.rerun()
-                
-            # Botão Facebook
-            if st.button("📘 " + t["entrar_facebook"], use_container_width=True):
-                st.session_state.logado = True
-                st.session_state.usuario_atual = "Usuário Facebook"
-                st.rerun()
+                    st.success("Conta criada com sucesso! Faça login para continuar.")
 
 # --- ABA 5: CONFIGURAÇÕES ---
 with tab_config:
