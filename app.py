@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+import urllib.parse
 import streamlit as st
 import cv2
 import numpy as np
@@ -65,6 +66,31 @@ def carregar_banco_dados():
 
 df_produtos = carregar_banco_dados()
 
+@st.cache_data(ttl=86400)
+def buscar_imagem_google(nome_produto):
+    """
+    Busca a imagem real do produto via Google Custom Search API.
+    Se as chaves não estiverem configuradas, utiliza um fallback.
+    """
+    if "google_api_key" in st.secrets and "google_cx" in st.secrets:
+        try:
+            url = "https://www.googleapis.com/customsearch/v1"
+            params = {
+                "q": f"{nome_produto} produto",
+                "cx": st.secrets["google_cx"],
+                "key": st.secrets["google_api_key"],
+                "searchType": "image",
+                "num": 1
+            }
+            res = requests.get(url, params=params, timeout=5).json()
+            if "items" in res and len(res["items"]) > 0:
+                return res["items"][0]["link"]
+        except Exception:
+            pass
+            
+    termo = urllib.parse.quote(nome_produto.strip())
+    return f"https://source.unsplash.com/featured/?{termo}"
+
 def buscar_produto_por_codigo(codigo):
     if df_produtos.empty:
         return None
@@ -72,10 +98,14 @@ def buscar_produto_por_codigo(codigo):
     resultado = df_produtos[df_produtos['Código de Barras'] == codigo_str]
     if not resultado.empty:
         prod = resultado.iloc[0]
+        nome = prod['Nome']
+        img_url = buscar_imagem_google(nome)
+        
         return {
-            "nome": prod['Nome'],
+            "nome": nome,
             "preco_brl": float(prod['Preço (R$)']),
-            "link": prod['Link']
+            "link_imagem": img_url,
+            "link_google": f"https://www.google.com/search?tbm=isch&q={urllib.parse.quote(nome)}"
         }
     return None
 
@@ -500,13 +530,16 @@ with tab_scanner:
             
             if prod_info:
                 st.markdown('<div class="product-card">', unsafe_allow_html=True)
-                col_img, col_info = st.columns([1, 2])
-                with col_img:
-                    st.image(prod_info["link"], width="stretch")
-                with col_info:
-                    st.markdown(f"<h4 style='margin:0;'>{prod_info['nome']}</h4>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='price-tag'>{fmt_moeda(prod_info['preco_brl'])}</div>", unsafe_allow_html=True)
-                    st.caption(f"Cód: {codigo}")
+                
+                try:
+                    st.image(prod_info["link_imagem"], use_container_width=True)
+                except Exception:
+                    st.warning("🖼️ Imagem do produto indisponível.")
+
+                st.markdown(f"<h4 style='margin-top:8px;'>{prod_info['nome']}</h4>", unsafe_allow_html=True)
+                st.markdown(f"<div class='price-tag'>{fmt_moeda(prod_info['preco_brl'])}</div>", unsafe_allow_html=True)
+                st.caption(f"Cód: {codigo}")
+                st.markdown(f"[🔍 Abrir mais fotos no Google]({prod_info['link_google']})")
                     
                 qtd = st.number_input(t["quantidade"], min_value=1, max_value=99, value=1, step=1)
                 st.markdown('</div>', unsafe_allow_html=True)
