@@ -1,9 +1,11 @@
 import os
 import json
+import datetime
 import streamlit as st
 import cv2
 import numpy as np
 import requests
+import pandas as pd
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
 from streamlit_google_auth import Authenticate
 
@@ -17,7 +19,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Cria dinamicamente o client_secret.json caso as secrets existam
 SECRET_PATH = "client_secret.json"
 if "google_credentials" in st.secrets:
     credenciais = {
@@ -44,7 +45,6 @@ authenticator = Authenticate(
     redirect_uri=REDIRECT_URI
 )
 
-# Verifica autenticação existente
 try:
     authenticator.check_authenticity()
 except Exception:
@@ -70,14 +70,13 @@ cotacoes = obter_cotacoes()
 TRADUCOES = {
     "PT": {
         "escanear": "📷 Escanear",
-        "carrinho": "🛒 Carrinho",
-        "historico": "📜 Histórico",
+        "compras": "🛍️ Compras",
         "perfil": "👤 Perfil",
         "config": "⚙️ Configurações",
         "saudacao": "Olá",
-        "gasto_mensal": "Gasto Mensal",
+        "gasto_mensal": "Gasto no Período",
         "limite_definido": "Limite Definido",
-        "alerta_limite": "⚠️ Você ultrapassou seu limite mensal!",
+        "alerta_limite": "⚠️ Você ultrapassou seu limite!",
         "apontar_camera": "📷 Aponte a câmera para o código de barras",
         "voltar": "❌ Voltar sem Escanear",
         "abrir_camera": "📷 Abrir Câmera para Escanear",
@@ -88,18 +87,25 @@ TRADUCOES = {
         "quantidade": "Quantidade:",
         "add_carrinho": "➕ Adicionar ao Carrinho",
         "item_add": "Item(ns) adicionado(s) ao carrinho!",
+        "carrinho_secao": "🛒 Carrinho de Compras",
         "carrinho_vazio": "Seu carrinho está vazio.",
         "total_compra": "Total da Compra",
         "finalizar": "Finalizar Compra",
         "compra_feita": "Compra finalizada com sucesso!",
-        "historico_vazio": "Suas compras finalizadas aparecerão listadas aqui.",
+        "historico_secao": "📜 Histórico de Compras",
+        "historico_vazio": "Nenhuma compra finalizada até o momento.",
+        "itens_label": "itens",
+        "data_label": "Data",
         "tema": "Modo Visual",
         "claro": "Claro",
         "escuro": "Escuro",
         "idioma": "Idioma",
         "moeda": "Moeda Principal",
-        "limite_label": "Ajustar Limite Mensal:",
-        "salvar_limite": "Salvar Limite",
+        "limite_label": "Ajustar Limite de Gastos:",
+        "prazo_label": "Selecione o Prazo do Limite:",
+        "salvar_limite": "Salvar Limite e Prazo",
+        "zerar_gastos": "🔄 Zerar Gasto Acumulado",
+        "gastos_zerados": "Gasto zerado com sucesso!",
         "login_opcional": "🔒 Acessar Conta",
         "entrar_aba": "Entrar",
         "criar_aba": "Criar Conta",
@@ -111,18 +117,20 @@ TRADUCOES = {
         "ou_social": "Ou entre com",
         "sair": "🔴 Sair da Conta",
         "conectado": "Conectado como",
-        "limite_salvo": "Novo limite mensal salvo com sucesso!"
+        "limite_salvo": "Novo limite e prazo salvos com sucesso!",
+        "ver_historico": "📊 Ver histórico de gastos",
+        "msg_sucesso": "Parabéns, você gastou menos que no período anterior",
+        "msg_alerta": "Você gastou um pouco mais ultimamente."
     },
     "ES": {
         "escanear": "📷 Escanear",
-        "carrinho": "🛒 Carrito",
-        "historico": "📜 Historial",
+        "compras": "🛍️ Compras",
         "perfil": "👤 Perfil",
         "config": "⚙️ Configuración",
         "saudacao": "Hola",
-        "gasto_mensal": "Gasto Mensual",
+        "gasto_mensal": "Gasto del Período",
         "limite_definido": "Límite Definido",
-        "alerta_limite": "⚠️ ¡Has superado tu límite mensual!",
+        "alerta_limite": "⚠️ ¡Has superado tu límite!",
         "apontar_camera": "📷 Apunta la cámara al código de barras",
         "voltar": "❌ Volver sin Escanear",
         "abrir_camera": "📷 Abrir Cámara para Escanear",
@@ -133,18 +141,25 @@ TRADUCOES = {
         "quantidade": "Cantidad:",
         "add_carrinho": "➕ Añadir al Carrito",
         "item_add": "¡Artículo(s) añadido(s) al carrito!",
+        "carrinho_secao": "🛒 Carrito de Compras",
         "carrinho_vazio": "Tu carrito está vacío.",
         "total_compra": "Total de la Compra",
         "finalizar": "Finalizar Compra",
         "compra_feita": "¡Compra finalizada con éxito!",
-        "historico_vazio": "Tus compras finalizadas aparecerán aquí.",
+        "historico_secao": "📜 Historial de Compras",
+        "historico_vazio": "No hay compras finalizadas por el momento.",
+        "itens_label": "artículos",
+        "data_label": "Fecha",
         "tema": "Modo Visual",
         "claro": "Claro",
         "escuro": "Oscuro",
         "idioma": "Idioma",
         "moeda": "Moneda Principal",
-        "limite_label": "Ajustar Límite Mensual:",
-        "salvar_limite": "Guardar Límite",
+        "limite_label": "Ajustar Límite de Gastos:",
+        "prazo_label": "Seleccione el Plazo del Límite:",
+        "salvar_limite": "Guardar Límite y Plazo",
+        "zerar_gastos": "🔄 Reiniciar Gasto Acumulado",
+        "gastos_zerados": "¡Gasto reiniciado con éxito!",
         "login_opcional": "🔒 Acceder a la Cuenta",
         "entrar_aba": "Iniciar Sesión",
         "criar_aba": "Crear Cuenta",
@@ -156,18 +171,20 @@ TRADUCOES = {
         "ou_social": "O ingresa con",
         "sair": "🔴 Cerrar Sesión",
         "conectado": "Conectado como",
-        "limite_salvo": "¡Nuevo límite mensual guardado!"
+        "limite_salvo": "¡Nuevo límite y plazo guardados!",
+        "ver_historico": "📊 Ver historial de gastos",
+        "msg_sucesso": "Felicitaciones, gastaste menos que en el período anterior",
+        "msg_alerta": "Has gastado un poco más últimamente."
     },
     "EN": {
         "escanear": "📷 Scan",
-        "carrinho": "🛒 Cart",
-        "historico": "📜 History",
+        "compras": "🛍️ Purchases",
         "perfil": "👤 Profile",
         "config": "⚙️ Settings",
         "saudacao": "Hello",
-        "gasto_mensal": "Monthly Spending",
+        "gasto_mensal": "Period Spending",
         "limite_definido": "Set Limit",
-        "alerta_limite": "⚠️ You have exceeded your monthly limit!",
+        "alerta_limite": "⚠️ You have exceeded your limit!",
         "apontar_camera": "📷 Point the camera at the barcode",
         "voltar": "❌ Back without Scanning",
         "abrir_camera": "📷 Open Camera to Scan",
@@ -178,18 +195,25 @@ TRADUCOES = {
         "quantidade": "Quantity:",
         "add_carrinho": "➕ Add to Cart",
         "item_add": "Item(s) added to cart!",
+        "carrinho_secao": "🛒 Shopping Cart",
         "carrinho_vazio": "Your cart is empty.",
         "total_compra": "Purchase Total",
         "finalizar": "Checkout",
         "compra_feita": "Purchase completed successfully!",
-        "historico_vazio": "Your completed purchases will appear here.",
+        "historico_secao": "📜 Purchase History",
+        "historico_vazio": "No completed purchases yet.",
+        "itens_label": "items",
+        "data_label": "Date",
         "tema": "Visual Mode",
         "claro": "Light",
         "escuro": "Dark",
         "idioma": "Language",
         "moeda": "Main Currency",
-        "limite_label": "Adjust Monthly Limit:",
-        "salvar_limite": "Save Limit",
+        "limite_label": "Adjust Spending Limit:",
+        "prazo_label": "Select Limit Period:",
+        "salvar_limite": "Save Limit and Period",
+        "zerar_gastos": "🔄 Reset Accumulated Spending",
+        "gastos_zerados": "Spending reset successfully!",
         "login_opcional": "🔒 Account Access",
         "entrar_aba": "Login",
         "criar_aba": "Sign Up",
@@ -201,7 +225,10 @@ TRADUCOES = {
         "ou_social": "Or continue with",
         "sair": "🔴 Log Out",
         "conectado": "Connected as",
-        "limite_salvo": "New monthly limit saved successfully!"
+        "limite_salvo": "New limit and period saved successfully!",
+        "ver_historico": "📊 View spending history",
+        "msg_sucesso": "Congratulations, you spent less than in the previous period",
+        "msg_alerta": "You spent a bit more recently."
     }
 }
 
@@ -225,7 +252,7 @@ class BarcodeScanner(VideoProcessorBase):
         return frame.from_ndarray(img, format="bgr24")
 
 # ==========================================
-# 4. Estados da Sessão
+# 4. Estados da Sessão e Lógica do Ciclo
 # ==========================================
 if "logado" not in st.session_state:
     st.session_state.logado = False
@@ -250,10 +277,37 @@ if "tocar_som" not in st.session_state:
 
 if "carrinho" not in st.session_state:
     st.session_state.carrinho = []
+if "historico_compras" not in st.session_state:
+    st.session_state.historico_compras = []
+
+# Configuração de Limite e Prazo
 if "limite_mensal_brl" not in st.session_state:
     st.session_state.limite_mensal_brl = 500.00
+if "prazo_dias" not in st.session_state:
+    st.session_state.prazo_dias = 30
+if "data_inicio_ciclo" not in st.session_state:
+    st.session_state.data_inicio_ciclo = datetime.date.today()
 if "gasto_atual_brl" not in st.session_state:
-    st.session_state.gasto_atual_brl = 145.80
+    st.session_state.gasto_atual_brl = 0.00
+
+# Histórico de períodos anteriores para o gráfico
+if "historico_periodos" not in st.session_state:
+    st.session_state.historico_periodos = [
+        {"periodo": "Período -2", "total_brl": 320.00},
+        {"periodo": "Período -1", "total_brl": 410.00}
+    ]
+
+# Verificação e Reset Automático por Vencimento do Prazo
+hoje = datetime.date.today()
+dias_decorridos = (hoje - st.session_state.data_inicio_ciclo).days
+
+if dias_decorridos >= st.session_state.prazo_dias:
+    st.session_state.historico_periodos.append({
+        "periodo": f"Período {st.session_state.data_inicio_ciclo.strftime('%d/%m')}",
+        "total_brl": st.session_state.gasto_atual_brl
+    })
+    st.session_state.gasto_atual_brl = 0.00
+    st.session_state.data_inicio_ciclo = hoje
 
 def fmt_moeda(valor_brl):
     m = st.session_state.moeda
@@ -269,7 +323,7 @@ if st.session_state.get("connected"):
     st.session_state.logado = True
 
 # ==========================================
-# 5. Estilização CSS com Alinhamento Horizontal nas Abas
+# 5. Estilização CSS
 # ==========================================
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
@@ -287,7 +341,7 @@ st.markdown(f"""
         padding-bottom: 90px;
     }}
     header, footer {{ visibility: hidden; }}
-    .product-card, .budget-card {{
+    .product-card, .budget-card, .history-card {{
         background-color: {card_bg};
         border-radius: 16px;
         padding: 16px;
@@ -298,7 +352,6 @@ st.markdown(f"""
     }}
     .price-tag {{ font-size: 1.6rem; font-weight: 800; color: #2E7D32; margin: 4px 0; }}
 
-    /* Estilização da Navegação Inferior (Bottom Nav Bar) */
     div[data-baseweb="tab-list"] {{
         position: fixed;
         bottom: 0; left: 50%;
@@ -313,7 +366,6 @@ st.markdown(f"""
         box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
     }}
     
-    /* Força o alinhamento horizontal (ícone ao lado do texto) */
     div[data-baseweb="tab"] {{
         flex-grow: 1;
         text-align: center;
@@ -326,7 +378,6 @@ st.markdown(f"""
         gap: 4px !important;
     }}
     
-    /* Garante alinhamento inline dos nós internos de texto/ícone */
     div[data-baseweb="tab"] > div {{
         display: flex !important;
         flex-direction: row !important;
@@ -341,22 +392,23 @@ def reproduzir_bip():
     st.components.v1.html(sound_js, height=0)
 
 # ==========================================
-# 6. Abas Inferiores
+# 6. Abas Inferiores Unificadas (4 Abas)
 # ==========================================
-tab_scanner, tab_carrinho, tab_historico, tab_perfil, tab_config = st.tabs([
+tab_scanner, tab_compras, tab_perfil, tab_config = st.tabs([
     t["escanear"], 
-    t["carrinho"], 
-    t["historico"], 
+    t["compras"], 
     t["perfil"], 
     t["config"]
 ])
 
-# --- ABA 1: ESCANEAR / DADOS MANUAIS ---
+# --- ABA 1: ESCANEAR ---
 with tab_scanner:
     st.title("🛒 Scan Market")
     st.caption(f"{t['saudacao']}, **{st.session_state.usuario_atual}**!")
     
     porcentagem = min(st.session_state.gasto_atual_brl / st.session_state.limite_mensal_brl, 1.0)
+    dias_restantes = max(0, st.session_state.prazo_dias - dias_decorridos)
+    
     st.markdown('<div class="budget-card">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
@@ -365,11 +417,29 @@ with tab_scanner:
     with c2:
         st.caption(t["limite_definido"])
         st.markdown(f"**{fmt_moeda(st.session_state.limite_mensal_brl)}**")
-    st.progress(porcentagem)
     
+    st.progress(porcentagem)
+    st.caption(f"📅 Renovação automática em **{dias_restantes} dias** ({st.session_state.prazo_dias} dias de prazo)")
+
     if st.session_state.gasto_atual_brl > st.session_state.limite_mensal_brl:
         st.error(t["alerta_limite"])
     st.markdown('</div>', unsafe_allow_html=True)
+
+    # GRÁFICO EXPANDÍVEL DE HISTÓRICO DE GASTOS
+    with st.expander(t["ver_historico"], expanded=False):
+        dados_grafico = []
+        for p in st.session_state.historico_periodos[-3:]:
+            dados_grafico.append({"Período": p["periodo"], "Gasto": p["total_brl"] * cotacoes.get(st.session_state.moeda, 1.0)})
+        dados_grafico.append({"Período": "Atual", "Gasto": st.session_state.gasto_atual_brl * cotacoes.get(st.session_state.moeda, 1.0)})
+
+        df_grafico = pd.DataFrame(dados_grafico).set_index("Período")
+        st.bar_chart(df_grafico, use_container_width=True)
+
+        gasto_anterior = st.session_state.historico_periodos[-1]["total_brl"] if len(st.session_state.historico_periodos) > 0 else 0
+        if st.session_state.gasto_atual_brl <= gasto_anterior:
+            st.success(t["msg_sucesso"])
+        else:
+            st.warning(t["msg_alerta"])
 
     if st.session_state.tocar_som:
         reproduzir_bip()
@@ -396,7 +466,6 @@ with tab_scanner:
 
         st.divider()
 
-        # Opção de Inserção Manual de Código de Barras
         with st.expander(t["digitar_manual"], expanded=False):
             codigo_manual = st.text_input(t["digitar_placeholder"], key="input_manual")
             if st.button(t["buscar_codigo"], width="stretch"):
@@ -433,9 +502,9 @@ with tab_scanner:
                 st.success(t["item_add"])
                 st.rerun()
 
-# --- ABA 2: CARRINHO ---
-with tab_carrinho:
-    st.subheader(t["carrinho"])
+# --- ABA 2: COMPRAS ---
+with tab_compras:
+    st.subheader(t["carrinho_secao"])
     
     if len(st.session_state.carrinho) == 0:
         st.info(t["carrinho_vazio"])
@@ -456,17 +525,37 @@ with tab_carrinho:
         st.metric(label=t["total_compra"], value=fmt_moeda(total_brl))
         
         if st.button(t["finalizar"], width="stretch", type="primary"):
+            agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
             st.session_state.gasto_atual_brl += total_brl
+            
+            st.session_state.historico_compras.insert(0, {
+                "data": agora,
+                "total_brl": total_brl,
+                "itens_qtd": sum(i["quantidade"] for i in st.session_state.carrinho)
+            })
+            
             st.session_state.carrinho = []
             st.success(t["compra_feita"])
             st.rerun()
 
-# --- ABA 3: HISTÓRICO ---
-with tab_historico:
-    st.subheader(t["historico"])
-    st.caption(t["historico_vazio"])
+    st.divider()
 
-# --- ABA 4: PERFIL ---
+    st.subheader(t["historico_secao"])
+    
+    if len(st.session_state.historico_compras) == 0:
+        st.caption(t["historico_vazio"])
+    else:
+        for idx_h, compra in enumerate(st.session_state.historico_compras):
+            st.markdown('<div class="history-card">', unsafe_allow_html=True)
+            col_h1, col_h2 = st.columns([2, 1])
+            with col_h1:
+                st.markdown(f"🗓️ **{compra['data']}**")
+                st.caption(f"{compra['itens_qtd']} {t['itens_label']}")
+            with col_h2:
+                st.markdown(f"**{fmt_moeda(compra['total_brl'])}**")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+# --- ABA 3: PERFIL ---
 with tab_perfil:
     st.subheader(t["perfil"])
     
@@ -494,7 +583,6 @@ with tab_perfil:
 
     else:
         st.write(f"**{t['login_opcional']}**")
-        
         st.write(f"**{t['ou_social']}**")
         try:
             authenticator.login()
@@ -532,7 +620,7 @@ with tab_perfil:
                     st.session_state.usuarios[nu] = ns
                     st.success("Conta criada com sucesso! Faça login para continuar.")
 
-# --- ABA 5: CONFIGURAÇÕES ---
+# --- ABA 4: CONFIGURAÇÕES ---
 with tab_config:
     st.subheader(t["config"])
     
@@ -579,7 +667,24 @@ with tab_config:
         value=float(st.session_state.limite_mensal_brl),
         step=50.0
     )
+
+    prazos_opcoes = [7, 15, 30]
+    novo_prazo = st.selectbox(
+        t["prazo_label"],
+        options=prazos_opcoes,
+        format_func=lambda x: f"{x} dias",
+        index=prazos_opcoes.index(st.session_state.prazo_dias)
+    )
+
     if st.button(t["salvar_limite"], width="stretch"):
         st.session_state.limite_mensal_brl = novo_limite
+        st.session_state.prazo_dias = novo_prazo
         st.success(t["limite_salvo"])
+        st.rerun()
+
+    st.divider()
+
+    if st.button(t["zerar_gastos"], width="stretch"):
+        st.session_state.gasto_atual_brl = 0.00
+        st.success(t["gastos_zerados"])
         st.rerun()
