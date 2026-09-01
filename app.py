@@ -4,7 +4,7 @@ import numpy as np
 import requests
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
 
-# 1. Configuração Mobile da Página
+# 1. Configuração Mobile
 st.set_page_config(
     page_title="Scan Market",
     page_icon="🛒",
@@ -12,27 +12,22 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. Busca Cotação Diária das Moedas em Relação ao BRL (API Externa)
-@st.cache_data(ttl=3600)  # Atualiza a cotação a cada 1 hora
+# 2. Cotações Diárias
+@st.cache_data(ttl=3600)
 def obter_cotacoes():
     try:
         url = "https://open.er-api.com/v6/latest/BRL"
         res = requests.get(url, timeout=5).json()
         if res.get("result") == "success":
             rates = res.get("rates", {})
-            return {
-                "BRL": 1.0,
-                "USD": rates.get("USD", 0.18),
-                "ARS": rates.get("ARS", 175.0)
-            }
+            return {"BRL": 1.0, "USD": rates.get("USD", 0.18), "ARS": rates.get("ARS", 175.0)}
     except Exception:
         pass
-    # Valores de fallback em caso de falha de conexão
     return {"BRL": 1.0, "USD": 0.18, "ARS": 175.0}
 
 cotacoes = obter_cotacoes()
 
-# 3. Dicionário de Idiomas
+# 3. Dicionário Completo de Idiomas
 TRADUCOES = {
     "PT": {
         "escanear": "📷 Escanear",
@@ -40,6 +35,7 @@ TRADUCOES = {
         "historico": "📜 Histórico",
         "perfil": "👤 Perfil",
         "config": "⚙️ Configurações",
+        "saudacao": "Olá",
         "gasto_mensal": "Gasto Mensal",
         "limite_definido": "Limite Definido",
         "alerta_limite": "⚠️ Você ultrapassou seu limite mensal!",
@@ -54,6 +50,7 @@ TRADUCOES = {
         "total_compra": "Total da Compra",
         "finalizar": "Finalizar Compra",
         "compra_feita": "Compra finalizada com sucesso!",
+        "historico_vazio": "Suas compras finalizadas aparecerão listadas aqui.",
         "tema": "Modo Visual",
         "claro": "Claro",
         "escuro": "Escuro",
@@ -61,12 +58,20 @@ TRADUCOES = {
         "moeda": "Moeda Principal",
         "limite_label": "Ajustar Limite Mensal:",
         "salvar_limite": "Salvar Limite",
-        "login_opcional": "🔒 Login (Opcional)",
+        "login_opcional": "🔒 Acessar Conta",
+        "entrar_aba": "Entrar",
+        "criar_aba": "Criar Conta",
         "usuario": "Usuário",
         "senha": "Senha",
-        "entrar": "Entrar",
+        "conf_senha": "Confirmar Senha",
+        "entrar_btn": "Entrar",
+        "cadastrar_btn": "Cadastrar",
+        "ou_social": "Ou entre com",
+        "entrar_google": "Continuar com Google",
+        "entrar_facebook": "Continuar com Facebook",
         "sair": "🔴 Sair da Conta",
-        "conectado": "Conectado como"
+        "conectado": "Conectado como",
+        "limite_salvo": "Novo limite mensal salvo com sucesso!"
     },
     "ES": {
         "escanear": "📷 Escanear",
@@ -74,6 +79,7 @@ TRADUCOES = {
         "historico": "📜 Historial",
         "perfil": "👤 Perfil",
         "config": "⚙️ Configuración",
+        "saudacao": "Hola",
         "gasto_mensal": "Gasto Mensual",
         "limite_definido": "Límite Definido",
         "alerta_limite": "⚠️ ¡Has superado tu límite mensual!",
@@ -88,6 +94,7 @@ TRADUCOES = {
         "total_compra": "Total de la Compra",
         "finalizar": "Finalizar Compra",
         "compra_feita": "¡Compra finalizada con éxito!",
+        "historico_vazio": "Tus compras finalizadas aparecerán aquí.",
         "tema": "Modo Visual",
         "claro": "Claro",
         "escuro": "Oscuro",
@@ -95,12 +102,20 @@ TRADUCOES = {
         "moeda": "Moneda Principal",
         "limite_label": "Ajustar Límite Mensual:",
         "salvar_limite": "Guardar Límite",
-        "login_opcional": "🔒 Iniciar Sesión (Opcional)",
+        "login_opcional": "🔒 Acceder a la Cuenta",
+        "entrar_aba": "Iniciar Sesión",
+        "criar_aba": "Crear Cuenta",
         "usuario": "Usuario",
         "senha": "Contraseña",
-        "entrar": "Entrar",
+        "conf_senha": "Confirmar Contraseña",
+        "entrar_btn": "Entrar",
+        "cadastrar_btn": "Registrarse",
+        "ou_social": "O ingresa con",
+        "entrar_google": "Continuar con Google",
+        "entrar_facebook": "Continuar con Facebook",
         "sair": "🔴 Cerrar Sesión",
-        "conectado": "Conectado como"
+        "conectado": "Conectado como",
+        "limite_salvo": "¡Nuevo límite mensual guardado!"
     },
     "EN": {
         "escanear": "📷 Scan",
@@ -108,6 +123,7 @@ TRADUCOES = {
         "historico": "📜 History",
         "perfil": "👤 Profile",
         "config": "⚙️ Settings",
+        "saudacao": "Hello",
         "gasto_mensal": "Monthly Spending",
         "limite_definido": "Set Limit",
         "alerta_limite": "⚠️ You have exceeded your monthly limit!",
@@ -122,6 +138,7 @@ TRADUCOES = {
         "total_compra": "Purchase Total",
         "finalizar": "Checkout",
         "compra_feita": "Purchase completed successfully!",
+        "historico_vazio": "Your completed purchases will appear here.",
         "tema": "Visual Mode",
         "claro": "Light",
         "escuro": "Dark",
@@ -129,22 +146,29 @@ TRADUCOES = {
         "moeda": "Main Currency",
         "limite_label": "Adjust Monthly Limit:",
         "salvar_limite": "Save Limit",
-        "login_opcional": "🔒 Login (Optional)",
+        "login_opcional": "🔒 Account Access",
+        "entrar_aba": "Login",
+        "criar_aba": "Sign Up",
         "usuario": "Username",
         "senha": "Password",
-        "entrar": "Login",
+        "conf_senha": "Confirm Password",
+        "entrar_btn": "Log In",
+        "cadastrar_btn": "Sign Up",
+        "ou_social": "Or continue with",
+        "entrar_google": "Continue with Google",
+        "entrar_facebook": "Continue with Facebook",
         "sair": "🔴 Log Out",
-        "conectado": "Connected as"
+        "conectado": "Connected as",
+        "limite_salvo": "New monthly limit saved successfully!"
     }
 }
 
-# Símbolos das moedas
 SIMBOLOS = {"BRL": "R$", "USD": "$", "ARS": "$"}
 
-# 4. Detector de Código de Barras do OpenCV
+# 4. Detector de Código de Barras
 barcode_detector = cv2.barcode.BarcodeDetector()
 
-# 5. Inicialização dos Estados do App (Session State)
+# 5. Estados do App
 if "logado" not in st.session_state:
     st.session_state.logado = False
 if "usuario_atual" not in st.session_state:
@@ -152,7 +176,6 @@ if "usuario_atual" not in st.session_state:
 if "usuarios" not in st.session_state:
     st.session_state.usuarios = {"admin": "1234"}
 
-# Preferências
 if "tema" not in st.session_state:
     st.session_state.tema = "Claro"
 if "idioma" not in st.session_state:
@@ -174,39 +197,29 @@ if "limite_mensal_brl" not in st.session_state:
 if "gasto_atual_brl" not in st.session_state:
     st.session_state.gasto_atual_brl = 145.80
 
-# Função Auxiliar de Formatação de Valor
 def fmt_moeda(valor_brl):
     m = st.session_state.moeda
     taxa = cotacoes.get(m, 1.0)
     simbolo = SIMBOLOS.get(m, "$")
-    valor_convertido = valor_brl * taxa
-    return f"{simbolo} {valor_convertido:,.2f}"
+    return f"{simbolo} {valor_brl * taxa:,.2f}"
 
 t = TRADUCOES[st.session_state.idioma]
 
-# 6. Processamento de Vídeo
+# 6. Detector WebRTC
 class BarcodeScanner(VideoProcessorBase):
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
         ok, decoded_info, _, corners = barcode_detector.detectAndDecode(img)
-        
         if ok and decoded_info:
             for info in decoded_info:
                 if info and info != st.session_state.ultimo_codigo:
                     st.session_state.ultimo_codigo = info
                     st.session_state.abrir_camera = False
                     st.session_state.tocar_som = True
-                    
-        if corners is not None:
-            corners = corners.astype(int)
-            for corner in corners:
-                cv2.polylines(img, [corner], True, (0, 255, 0), 3)
-                
         return frame.from_ndarray(img, format="bgr24")
 
-# 7. Estilização CSS Dinâmica (Modo Claro vs Modo Escuro)
+# 7. CSS + Botões Sociais
 is_dark = st.session_state.tema == "Escuro"
-
 bg_color = "#121212" if is_dark else "#F8F9FA"
 card_bg = "#1E1E1E" if is_dark else "#FFFFFF"
 text_color = "#E0E0E0" if is_dark else "#212529"
@@ -221,9 +234,7 @@ st.markdown(f"""
         margin: 0 auto;
         padding-bottom: 90px;
     }}
-    
     header, footer {{ visibility: hidden; }}
-
     .product-card, .budget-card {{
         background-color: {card_bg};
         border-radius: 16px;
@@ -233,48 +244,46 @@ st.markdown(f"""
         margin-top: 10px;
         margin-bottom: 15px;
     }}
+    .price-tag {{ font-size: 1.6rem; font-weight: 800; color: #2E7D32; margin: 4px 0; }}
     
-    .price-tag {{
-        font-size: 1.6rem;
-        font-weight: 800;
-        color: #2E7D32;
-        margin: 4px 0;
+    /* Botões Sociais */
+    .btn-social {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        text-decoration: none;
+        cursor: pointer;
     }}
+    .btn-google {{ background-color: #FFFFFF; color: #000; border: 1px solid #CCC; }}
+    .btn-facebook {{ background-color: #1877F2; color: #FFF; border: none; }}
 
-    /* Bottom Bar Fixa */
+    /* Bottom Bar */
     div[data-baseweb="tab-list"] {{
         position: fixed;
-        bottom: 0;
-        left: 50%;
+        bottom: 0; left: 50%;
         transform: translateX(-50%);
-        width: 100%;
-        max-width: 480px;
+        width: 100%; max-width: 480px;
         background-color: {card_bg};
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
         z-index: 99999;
-        display: flex;
-        justify-content: space-around;
+        display: flex; justify-content: space-around;
         padding: 8px 0;
         border-top: 1px solid {border_color};
     }}
-
-    div[data-baseweb="tab"] {{
-        flex-grow: 1;
-        text-align: center;
-    }}
+    div[data-baseweb="tab"] {{ flex-grow: 1; text-align: center; }}
     </style>
 """, unsafe_allow_html=True)
 
-# Som Bip
 def reproduzir_bip():
-    sound_js = """
-    <audio autoplay>
-        <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
-    </audio>
-    """
+    sound_js = """<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg"></audio>"""
     st.components.v1.html(sound_js, height=0)
 
-# 8. Navegação Por Abas Inferiores
+# 8. Abas
 tab_scanner, tab_carrinho, tab_historico, tab_perfil, tab_config = st.tabs([
     t["escanear"], t["carrinho"], t["historico"], t["perfil"], t["config"]
 ])
@@ -282,9 +291,8 @@ tab_scanner, tab_carrinho, tab_historico, tab_perfil, tab_config = st.tabs([
 # --- ABA 1: ESCANEAR ---
 with tab_scanner:
     st.title("🛒 Scan Market")
-    st.caption(f"Olá, **{st.session_state.usuario_atual}**!")
+    st.caption(f"{t['saudacao']}, **{st.session_state.usuario_atual}**!")
     
-    # Barra de Limite Mensal
     porcentagem = min(st.session_state.gasto_atual_brl / st.session_state.limite_mensal_brl, 1.0)
     st.markdown('<div class="budget-card">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
@@ -304,7 +312,6 @@ with tab_scanner:
         reproduzir_bip()
         st.session_state.tocar_som = False
 
-    # Leitor / Menu
     if st.session_state.abrir_camera:
         st.subheader(t["apontar_camera"])
         webrtc_streamer(
@@ -361,8 +368,7 @@ with tab_carrinho:
         for idx, item in enumerate(st.session_state.carrinho):
             col_item, col_btn = st.columns([3, 1])
             with col_item:
-                subtotal = item["preco_brl"] * item["quantidade"]
-                st.write(f"**{item['quantidade']}x {item['nome']}** — {fmt_moeda(subtotal)}")
+                st.write(f"**{item['quantidade']}x {item['nome']}** — {fmt_moeda(item['preco_brl'] * item['quantidade'])}")
                 st.caption(f"Cód: {item['codigo']}")
             with col_btn:
                 if st.button("🗑️", key=f"del_{idx}"):
@@ -381,9 +387,9 @@ with tab_carrinho:
 # --- ABA 3: HISTÓRICO ---
 with tab_historico:
     st.subheader(t["historico"])
-    st.caption("Suas compras finalizadas aparecerão listadas aqui.")
+    st.caption(t["historico_vazio"])
 
-# --- ABA 4: PERFIL ---
+# --- ABA 4: PERFIL & LOGIN SOCIAL ---
 with tab_perfil:
     st.subheader(t["perfil"])
     
@@ -395,17 +401,52 @@ with tab_perfil:
             st.rerun()
     else:
         st.write(f"**{t['login_opcional']}**")
-        u = st.text_input(t["usuario"], key="u_login")
-        s = st.text_input(t["senha"], type="password", key="s_login")
-        if st.button(t["entrar"], use_container_width=True, type="primary"):
-            if u in st.session_state.usuarios and st.session_state.usuarios[u] == s:
+        
+        sub_entrar, sub_criar = st.tabs([t["entrar_aba"], t["criar_aba"]])
+        
+        with sub_entrar:
+            u = st.text_input(t["usuario"], key="u_login")
+            s = st.text_input(t["senha"], type="password", key="s_login")
+            if st.button(t["entrar_btn"], use_container_width=True, type="primary"):
+                if u in st.session_state.usuarios and st.session_state.usuarios[u] == s:
+                    st.session_state.logado = True
+                    st.session_state.usuario_atual = u
+                    st.rerun()
+                else:
+                    st.error("Erro ao conectar.")
+                    
+        with sub_criar:
+            nu = st.text_input(t["usuario"], key="u_cad")
+            ns = st.text_input(t["senha"], type="password", key="s_cad")
+            cs = st.text_input(t["conf_senha"], type="password", key="c_cad")
+            
+            if st.button(t["cadastrar_btn"], use_container_width=True, type="primary"):
+                if not nu or not ns:
+                    st.warning("Preencha todos os campos.")
+                elif nu in st.session_state.usuarios:
+                    st.error("Usuário já existe.")
+                elif ns != cs:
+                    st.error("As senhas não coincidem.")
+                else:
+                    st.session_state.usuarios[nu] = ns
+                    st.success("Conta criada! Faça login.")
+            
+            st.divider()
+            st.caption(f"**{t['ou_social']}**")
+            
+            # Botão Google com SVG
+            if st.button("🌐 " + t["entrar_google"], use_container_width=True):
                 st.session_state.logado = True
-                st.session_state.usuario_atual = u
+                st.session_state.usuario_atual = "Usuário Google"
                 st.rerun()
-            else:
-                st.error("Erro ao conectar.")
+                
+            # Botão Facebook
+            if st.button("📘 " + t["entrar_facebook"], use_container_width=True):
+                st.session_state.logado = True
+                st.session_state.usuario_atual = "Usuário Facebook"
+                st.rerun()
 
-# --- ABA 5: CONFIGURAÇÕES (Nova Aba) ---
+# --- ABA 5: CONFIGURAÇÕES ---
 with tab_config:
     st.subheader(t["config"])
     
@@ -458,4 +499,5 @@ with tab_config:
     )
     if st.button(t["salvar_limite"], use_container_width=True):
         st.session_state.limite_mensal_brl = novo_limite
-        st.success("OK!")
+        st.success(t["limite_salvo"])
+        st.rerun()
