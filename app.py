@@ -1,12 +1,24 @@
-
 import os
 import json
 import streamlit as st
+import cv2
+import numpy as np
+import requests
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
 from streamlit_google_auth import Authenticate
 
-# --- ADICIONE ESTE BLOCO LOGO APÓS AS IMPORTAÇÕES ---
-SECRET_PATH = "client_secret.json"
+# ==========================================
+# 1. Configuração do Streamlit e Secrets Google
+# ==========================================
+st.set_page_config(
+    page_title="Scan Market",
+    page_icon="🛒",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
+# Cria dinamicamente o client_secret.json caso as secrets existam
+SECRET_PATH = "client_secret.json"
 if "google_credentials" in st.secrets:
     credenciais = {
         "web": {
@@ -21,37 +33,26 @@ if "google_credentials" in st.secrets:
     }
     with open(SECRET_PATH, "w", encoding="utf-8") as f:
         json.dump(credenciais, f)
-# ----------------------------------------------------
 
-import streamlit as st
-import cv2
-import numpy as np
-import requests
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
-from streamlit_google_auth import Authenticate
+REDIRECT_URI = st.secrets["google_credentials"]["redirect_uris"][0] if "google_credentials" in st.secrets else "https://scanmarket-jpkpuzxo5wwmdqnfeyjssk.streamlit.app/"
 
-# 1. Configuração Mobile da Página
-st.set_page_config(
-    page_title="Scan Market",
-    page_icon="🛒",
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
-
-# 2. Configuração do Autenticador do Google
-# Certifique-se de que o arquivo 'client_secret.json' está salvo na raiz do repositório
 authenticator = Authenticate(
-    secret_credentials_path='client_secret.json',
+    secret_credentials_path=SECRET_PATH,
     cookie_name='scanmarket_google_cookie',
     cookie_key='chave_secreta_scanmarket_123',
     cookie_expiry_days=30,
-    redirect_uri='https://scanmarket-jpkpuzxo5wwmdqnfeyjssk.streamlit.app/'
+    redirect_uri=REDIRECT_URI
 )
 
-# Verifica a sessão do Google ao carregar a página
-authenticator.check_authentification()
+# Verifica autenticação existente
+try:
+    authenticator.check_authenticity()
+except Exception:
+    pass
 
-# 3. Cotações Diárias das Moedas (API Externa)
+# ==========================================
+# 2. Cotações e Traduções
+# ==========================================
 @st.cache_data(ttl=3600)
 def obter_cotacoes():
     try:
@@ -66,7 +67,6 @@ def obter_cotacoes():
 
 cotacoes = obter_cotacoes()
 
-# 4. Dicionário Completo de Idiomas
 TRADUCOES = {
     "PT": {
         "escanear": "📷 Escanear",
@@ -81,6 +81,9 @@ TRADUCOES = {
         "apontar_camera": "📷 Aponte a câmera para o código de barras",
         "voltar": "❌ Voltar sem Escanear",
         "abrir_camera": "📷 Abrir Câmera para Escanear",
+        "digitar_manual": "⌨️ Digitar Código Manualmente",
+        "digitar_placeholder": "Insira o código de barras ou ID do produto...",
+        "buscar_codigo": "Buscar Produto",
         "prod_escaneado": "Produto Escaneado",
         "quantidade": "Quantidade:",
         "add_carrinho": "➕ Adicionar ao Carrinho",
@@ -106,7 +109,6 @@ TRADUCOES = {
         "entrar_btn": "Entrar",
         "cadastrar_btn": "Cadastrar",
         "ou_social": "Ou entre com",
-        "entrar_google": "Entrar com Google (Gmail)",
         "sair": "🔴 Sair da Conta",
         "conectado": "Conectado como",
         "limite_salvo": "Novo limite mensal salvo com sucesso!"
@@ -124,6 +126,9 @@ TRADUCOES = {
         "apontar_camera": "📷 Apunta la cámara al código de barras",
         "voltar": "❌ Volver sin Escanear",
         "abrir_camera": "📷 Abrir Cámara para Escanear",
+        "digitar_manual": "⌨️ Ingresar Código Manualmente",
+        "digitar_placeholder": "Ingrese el código de barras o ID...",
+        "buscar_codigo": "Buscar Producto",
         "prod_escaneado": "Producto Escaneado",
         "quantidade": "Cantidad:",
         "add_carrinho": "➕ Añadir al Carrito",
@@ -149,7 +154,6 @@ TRADUCOES = {
         "entrar_btn": "Entrar",
         "cadastrar_btn": "Registrarse",
         "ou_social": "O ingresa con",
-        "entrar_google": "Continuar con Google (Gmail)",
         "sair": "🔴 Cerrar Sesión",
         "conectado": "Conectado como",
         "limite_salvo": "¡Nuevo límite mensual guardado!"
@@ -167,6 +171,9 @@ TRADUCOES = {
         "apontar_camera": "📷 Point the camera at the barcode",
         "voltar": "❌ Back without Scanning",
         "abrir_camera": "📷 Open Camera to Scan",
+        "digitar_manual": "⌨️ Enter Code Manually",
+        "digitar_placeholder": "Enter barcode or product ID...",
+        "buscar_codigo": "Search Product",
         "prod_escaneado": "Scanned Product",
         "quantidade": "Quantity:",
         "add_carrinho": "➕ Add to Cart",
@@ -192,7 +199,6 @@ TRADUCOES = {
         "entrar_btn": "Log In",
         "cadastrar_btn": "Sign Up",
         "ou_social": "Or continue with",
-        "entrar_google": "Continue with Google (Gmail)",
         "sair": "🔴 Log Out",
         "conectado": "Connected as",
         "limite_salvo": "New monthly limit saved successfully!"
@@ -201,10 +207,26 @@ TRADUCOES = {
 
 SIMBOLOS = {"BRL": "R$", "USD": "$", "ARS": "$"}
 
-# 5. Detector de Código de Barras OpenCV
+# ==========================================
+# 3. Processador de Vídeo OpenCV
+# ==========================================
 barcode_detector = cv2.barcode.BarcodeDetector()
 
-# 6. Estados do Aplicativo
+class BarcodeScanner(VideoProcessorBase):
+    def recv(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        ok, decoded_info, _, corners = barcode_detector.detectAndDecode(img)
+        if ok and decoded_info:
+            for info in decoded_info:
+                if info and info != st.session_state.ultimo_codigo:
+                    st.session_state.ultimo_codigo = info
+                    st.session_state.abrir_camera = False
+                    st.session_state.tocar_som = True
+        return frame.from_ndarray(img, format="bgr24")
+
+# ==========================================
+# 4. Estados da Sessão
+# ==========================================
 if "logado" not in st.session_state:
     st.session_state.logado = False
 if "usuario_atual" not in st.session_state:
@@ -212,7 +234,6 @@ if "usuario_atual" not in st.session_state:
 if "usuarios" not in st.session_state:
     st.session_state.usuarios = {"admin": "1234"}
 
-# Configurações de Aparência e Idioma
 if "tema" not in st.session_state:
     st.session_state.tema = "Claro"
 if "idioma" not in st.session_state:
@@ -220,7 +241,6 @@ if "idioma" not in st.session_state:
 if "moeda" not in st.session_state:
     st.session_state.moeda = "BRL"
 
-# Leitor e Câmera
 if "ultimo_codigo" not in st.session_state:
     st.session_state.ultimo_codigo = None
 if "abrir_camera" not in st.session_state:
@@ -228,7 +248,6 @@ if "abrir_camera" not in st.session_state:
 if "tocar_som" not in st.session_state:
     st.session_state.tocar_som = False
 
-# Carrinho e Orçamento
 if "carrinho" not in st.session_state:
     st.session_state.carrinho = []
 if "limite_mensal_brl" not in st.session_state:
@@ -244,26 +263,14 @@ def fmt_moeda(valor_brl):
 
 t = TRADUCOES[st.session_state.idioma]
 
-# 7. Sincronização do Usuário com Google Login
 if st.session_state.get("connected"):
     user_info = st.session_state.get("user_info", {})
     st.session_state.usuario_atual = user_info.get("name", user_info.get("email", "Usuário Google"))
     st.session_state.logado = True
 
-# 8. Detector WebRTC Atualizado (usando VideoProcessorBase)
-class BarcodeScanner(VideoProcessorBase):
-    def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        ok, decoded_info, _, corners = barcode_detector.detectAndDecode(img)
-        if ok and decoded_info:
-            for info in decoded_info:
-                if info and info != st.session_state.ultimo_codigo:
-                    st.session_state.ultimo_codigo = info
-                    st.session_state.abrir_camera = False
-                    st.session_state.tocar_som = True
-        return frame.from_ndarray(img, format="bgr24")
-
-# 9. Estilização CSS e Bottom Bar
+# ==========================================
+# 5. Estilização CSS e Bottom Bar Fixa com Ícones
+# ==========================================
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
 card_bg = "#1E1E1E" if is_dark else "#FFFFFF"
@@ -291,7 +298,7 @@ st.markdown(f"""
     }}
     .price-tag {{ font-size: 1.6rem; font-weight: 800; color: #2E7D32; margin: 4px 0; }}
 
-    /* Bottom Bar Fixa */
+    /* Estilização da Navegação Inferior (Bottom Nav Bar) */
     div[data-baseweb="tab-list"] {{
         position: fixed;
         bottom: 0; left: 50%;
@@ -299,11 +306,18 @@ st.markdown(f"""
         width: 100%; max-width: 480px;
         background-color: {card_bg};
         z-index: 99999;
-        display: flex; justify-content: space-around;
-        padding: 8px 0;
+        display: flex; 
+        justify-content: space-around;
+        padding: 10px 0;
         border-top: 1px solid {border_color};
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
     }}
-    div[data-baseweb="tab"] {{ flex-grow: 1; text-align: center; }}
+    div[data-baseweb="tab"] {{
+        flex-grow: 1;
+        text-align: center;
+        padding: 6px 0;
+        font-size: 0.85rem;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -311,12 +325,18 @@ def reproduzir_bip():
     sound_js = """<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg"></audio>"""
     st.components.v1.html(sound_js, height=0)
 
-# 10. Abas Inferiores
+# ==========================================
+# 6. Abas Inferiores
+# ==========================================
 tab_scanner, tab_carrinho, tab_historico, tab_perfil, tab_config = st.tabs([
-    t["escanear"], t["carrinho"], t["historico"], t["perfil"], t["config"]
+    t["escanear"], 
+    t["carrinho"], 
+    t["historico"], 
+    t["perfil"], 
+    t["config"]
 ])
 
-# --- ABA 1: ESCANEAR ---
+# --- ABA 1: ESCANEAR / DADOS MANUAIS ---
 with tab_scanner:
     st.title("🛒 Scan Market")
     st.caption(f"{t['saudacao']}, **{st.session_state.usuario_atual}**!")
@@ -343,7 +363,6 @@ with tab_scanner:
     if st.session_state.abrir_camera:
         st.subheader(t["apontar_camera"])
         
-        # Corrigido: video_processor_factory
         webrtc_streamer(
             key="scanner",
             mode=WebRtcMode.SENDRECV,
@@ -359,6 +378,18 @@ with tab_scanner:
         if st.button(t["abrir_camera"], width="stretch", type="primary"):
             st.session_state.abrir_camera = True
             st.rerun()
+
+        st.divider()
+
+        # Opção de Inserção Manual de Código de Barras
+        with st.expander(t["digitar_manual"], expanded=False):
+            codigo_manual = st.text_input(t["digitar_placeholder"], key="input_manual")
+            if st.button(t["buscar_codigo"], width="stretch"):
+                if codigo_manual.strip():
+                    st.session_state.ultimo_codigo = codigo_manual.strip()
+                    st.rerun()
+                else:
+                    st.warning("Por favor, digite um código válido.")
 
         if st.session_state.ultimo_codigo:
             codigo = st.session_state.ultimo_codigo
@@ -420,14 +451,12 @@ with tab_historico:
     st.subheader(t["historico"])
     st.caption(t["historico_vazio"])
 
-# --- ABA 4: PERFIL & LOGIN GOOGLE OFICIAL ---
+# --- ABA 4: PERFIL ---
 with tab_perfil:
     st.subheader(t["perfil"])
     
-    # 1. Caso esteja Logado via Google (OAuth)
     if st.session_state.get("connected"):
         user_info = st.session_state.get("user_info", {})
-        
         col_pic, col_details = st.columns([1, 3])
         with col_pic:
             if "picture" in user_info:
@@ -437,9 +466,10 @@ with tab_perfil:
             st.caption(user_info.get('email', ''))
 
         st.divider()
-        authenticator.logout(button_name=t["sair"], key="logout_google_btn")
+        if st.button(t["sair"], width="stretch"):
+            authenticator.logout()
+            st.rerun()
 
-    # 2. Caso esteja Logado via Login Tradicional
     elif st.session_state.logado:
         st.write(f"{t['conectado']}: **{st.session_state.usuario_atual}**")
         if st.button(t["sair"], width="stretch"):
@@ -447,13 +477,15 @@ with tab_perfil:
             st.session_state.usuario_atual = "Visitante"
             st.rerun()
 
-    # 3. Opções para Fazer Login
     else:
         st.write(f"**{t['login_opcional']}**")
         
-        # Botão Oficial de Login do Google
         st.write(f"**{t['ou_social']}**")
-        authenticator.login()
+        try:
+            authenticator.login()
+        except Exception:
+            st.info("Login social temporariamente indisponível. Use o acesso por usuário abaixo.")
+            
         st.divider()
         
         sub_entrar, sub_criar = st.tabs([t["entrar_aba"], t["criar_aba"]])
@@ -489,7 +521,6 @@ with tab_perfil:
 with tab_config:
     st.subheader(t["config"])
     
-    # Modo Claro / Escuro
     tema_sel = st.radio(
         t["tema"], 
         options=["Claro", "Escuro"], 
@@ -502,7 +533,6 @@ with tab_config:
         
     st.divider()
     
-    # Seleção de Idioma
     idioma_sel = st.selectbox(
         t["idioma"], 
         options=["PT", "ES", "EN"], 
@@ -515,7 +545,6 @@ with tab_config:
 
     st.divider()
 
-    # Seleção de Moeda
     moeda_sel = st.selectbox(
         t["moeda"], 
         options=["BRL", "USD", "ARS"], 
@@ -528,7 +557,6 @@ with tab_config:
         
     st.divider()
     
-    # Ajustar Limite Mensal
     novo_limite = st.number_input(
         t["limite_label"], 
         min_value=10.0, 
