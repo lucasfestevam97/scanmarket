@@ -428,7 +428,7 @@ with tab_perfil:
         
         # Botão Oficial de Login do Google
         st.write(f"**{t['ou_social']}**")
-        authenticator.login(color="blue", justification_content="center")
+        authenticator.login()
         st.divider()
         
         sub_entrar, sub_criar = st.tabs([t["entrar_aba"], t["criar_aba"]])
