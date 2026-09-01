@@ -5,3 +5,6 @@ requests
 streamlit-webrtc
 bcrypt
 streamlit-google-auth
+pyzbar
+customtkinter
+Pillow
