@@ -66,31 +66,6 @@ def carregar_banco_dados():
 
 df_produtos = carregar_banco_dados()
 
-@st.cache_data(ttl=86400)
-def buscar_imagem_google(nome_produto):
-    """
-    Busca a imagem real do produto via Google Custom Search API.
-    Se as chaves não estiverem configuradas, utiliza um fallback.
-    """
-    if "google_api_key" in st.secrets and "google_cx" in st.secrets:
-        try:
-            url = "https://www.googleapis.com/customsearch/v1"
-            params = {
-                "q": f"{nome_produto} produto",
-                "cx": st.secrets["google_cx"],
-                "key": st.secrets["google_api_key"],
-                "searchType": "image",
-                "num": 1
-            }
-            res = requests.get(url, params=params, timeout=5).json()
-            if "items" in res and len(res["items"]) > 0:
-                return res["items"][0]["link"]
-        except Exception:
-            pass
-            
-    termo = urllib.parse.quote(nome_produto.strip())
-    return f"https://source.unsplash.com/featured/?{termo}"
-
 def buscar_produto_por_codigo(codigo):
     if df_produtos.empty:
         return None
@@ -99,7 +74,9 @@ def buscar_produto_por_codigo(codigo):
     if not resultado.empty:
         prod = resultado.iloc[0]
         nome = prod['Nome']
-        img_url = buscar_imagem_google(nome)
+        
+        # Link de fallback visual simples
+        img_url = f"https://placehold.co/400x300/2e7d32/ffffff?text={urllib.parse.quote(nome[:20])}"
         
         return {
             "nome": nome,
@@ -136,14 +113,11 @@ TRADUCOES = {
         "gasto_mensal": "Gasto no Período",
         "limite_definido": "Limite Definido",
         "alerta_limite": "⚠️ Você ultrapassou seu limite!",
-        "apontar_camera": "📷 Aponte a câmera para o código de barras",
-        "voltar": "❌ Voltar sem Escanear",
-        "abrir_camera": "📷 Abrir Câmera para Escanear",
+        "voltar": "❌ Cancelar / Sair",
+        "abrir_camera": "Escanear produto",
         "digitar_manual": "⌨️ Digitar Código Manualmente",
-        "digitar_placeholder": "Insira o código de barras ou ID do produto...",
+        "digitar_placeholder": "Insira o código de barras ou ID...",
         "buscar_codigo": "Buscar Produto",
-        "prod_escaneado": "Produto Escaneado",
-        "prod_nao_encontrado": "⚠️ Produto não encontrado no banco de dados.",
         "quantidade": "Quantidade:",
         "add_carrinho": "➕ Adicionar ao Carrinho",
         "item_add": "Item(ns) adicionado(s) ao carrinho!",
@@ -155,10 +129,7 @@ TRADUCOES = {
         "historico_secao": "📜 Histórico de Compras",
         "historico_vazio": "Nenhuma compra finalizada até o momento.",
         "itens_label": "itens",
-        "data_label": "Data",
         "tema": "Modo Visual",
-        "claro": "Claro",
-        "escuro": "Escuro",
         "idioma": "Idioma",
         "moeda": "Moeda Principal",
         "limite_label": "Ajustar Limite de Gastos:",
@@ -192,14 +163,11 @@ TRADUCOES = {
         "gasto_mensal": "Gasto del Período",
         "limite_definido": "Límite Definido",
         "alerta_limite": "⚠️ ¡Has superado tu límite!",
-        "apontar_camera": "📷 Apunta la cámara al código de barras",
-        "voltar": "❌ Volver sin Escanear",
-        "abrir_camera": "📷 Abrir Cámara para Escanear",
+        "voltar": "❌ Cancelar / Salir",
+        "abrir_camera": "Escanear producto",
         "digitar_manual": "⌨️ Ingresar Código Manualmente",
-        "digitar_placeholder": "Ingrese el código de barras o ID...",
+        "digitar_placeholder": "Ingrese el código de barras...",
         "buscar_codigo": "Buscar Producto",
-        "prod_escaneado": "Producto Escaneado",
-        "prod_nao_encontrado": "⚠️ Producto no encontrado en la base de datos.",
         "quantidade": "Cantidad:",
         "add_carrinho": "➕ Añadir al Carrito",
         "item_add": "¡Artículo(s) añadido(s) al carrito!",
@@ -209,12 +177,9 @@ TRADUCOES = {
         "finalizar": "Finalizar Compra",
         "compra_feita": "¡Compra finalizada con éxito!",
         "historico_secao": "📜 Historial de Compras",
-        "historico_vazio": "No hay compras finalizadas por el momento.",
+        "historico_vazio": "No hay compras finalizadas.",
         "itens_label": "artículos",
-        "data_label": "Fecha",
         "tema": "Modo Visual",
-        "claro": "Claro",
-        "escuro": "Oscuro",
         "idioma": "Idioma",
         "moeda": "Moneda Principal",
         "limite_label": "Ajustar Límite de Gastos:",
@@ -233,10 +198,10 @@ TRADUCOES = {
         "ou_social": "O ingresa con",
         "sair": "🔴 Cerrar Sesión",
         "conectado": "Conectado como",
-        "limite_salvo": "¡Nuevo límite y plazo guardados!",
+        "limite_salvo": "¡Nuevo límite guardado!",
         "ver_grafico": "📊 Ver Historial Visual (Gráfico)",
         "voltar_historico": "⬅️ Volver al Historial",
-        "msg_sucesso": "Felicitaciones, gastaste menos que en el período anterior",
+        "msg_sucesso": "Felicitaciones, gastaste menos que antes",
         "msg_alerta": "Has gastado un poco más últimamente."
     },
     "EN": {
@@ -248,14 +213,11 @@ TRADUCOES = {
         "gasto_mensal": "Period Spending",
         "limite_definido": "Set Limit",
         "alerta_limite": "⚠️ You have exceeded your limit!",
-        "apontar_camera": "📷 Point the camera at the barcode",
-        "voltar": "❌ Back without Scanning",
-        "abrir_camera": "📷 Open Camera to Scan",
+        "voltar": "❌ Cancel / Exit",
+        "abrir_camera": "Escanear produto",
         "digitar_manual": "⌨️ Enter Code Manually",
-        "digitar_placeholder": "Enter barcode or product ID...",
+        "digitar_placeholder": "Enter barcode...",
         "buscar_codigo": "Search Product",
-        "prod_escaneado": "Scanned Product",
-        "prod_nao_encontrado": "⚠️ Product not found in database.",
         "quantidade": "Quantity:",
         "add_carrinho": "➕ Add to Cart",
         "item_add": "Item(s) added to cart!",
@@ -267,10 +229,7 @@ TRADUCOES = {
         "historico_secao": "📜 Purchase History",
         "historico_vazio": "No completed purchases yet.",
         "itens_label": "items",
-        "data_label": "Date",
         "tema": "Visual Mode",
-        "claro": "Light",
-        "escuro": "Dark",
         "idioma": "Language",
         "moeda": "Main Currency",
         "limite_label": "Adjust Spending Limit:",
@@ -289,10 +248,10 @@ TRADUCOES = {
         "ou_social": "Or continue with",
         "sair": "🔴 Log Out",
         "conectado": "Connected as",
-        "limite_salvo": "New limit and period saved successfully!",
+        "limite_salvo": "New limit saved successfully!",
         "ver_grafico": "📊 View Visual History (Chart)",
         "voltar_historico": "⬅️ Back to History",
-        "msg_sucesso": "Congratulations, you spent less than in the previous period",
+        "msg_sucesso": "Congratulations, you spent less than before",
         "msg_alerta": "You spent a bit more recently."
     }
 }
@@ -300,24 +259,32 @@ TRADUCOES = {
 SIMBOLOS = {"BRL": "R$", "USD": "$", "ARS": "$"}
 
 # ==========================================
-# 4. Processador de Vídeo OpenCV
+# 4. Processador OpenCV com Linha Vermelha de Banco
 # ==========================================
 barcode_detector = cv2.barcode.BarcodeDetector()
 
-class BarcodeScanner(VideoProcessorBase):
+class BarcodeScannerWithRedLine(VideoProcessorBase):
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        ok, decoded_info, _, corners = barcode_detector.detectAndDecode(img)
+        h, w, _ = img.shape
+
+        # Leitura do código de barras
+        ok, decoded_info, _, _ = barcode_detector.detectAndDecode(img)
         if ok and decoded_info:
             for info in decoded_info:
                 if info and info != st.session_state.ultimo_codigo:
                     st.session_state.ultimo_codigo = info
                     st.session_state.abrir_camera = False
                     st.session_state.tocar_som = True
+
+        # Desenha linha vermelha guia centralizada (estilo aplicativo de banco)
+        cy = h // 2
+        cv2.line(img, (int(w * 0.1), cy), (int(w * 0.9), cy), (0, 0, 255), 4)
+
         return frame.from_ndarray(img, format="bgr24")
 
 # ==========================================
-# 5. Estados da Sessão e Lógica do Ciclo
+# 5. Estados da Sessão
 # ==========================================
 if "logado" not in st.session_state:
     st.session_state.logado = False
@@ -388,7 +355,7 @@ if st.session_state.get("connected"):
     st.session_state.logado = True
 
 # ==========================================
-# 6. Estilização CSS
+# 6. Estilização CSS + CSS Tela Cheia
 # ==========================================
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
@@ -396,8 +363,30 @@ card_bg = "#1E1E1E" if is_dark else "#FFFFFF"
 text_color = "#E0E0E0" if is_dark else "#212529"
 border_color = "#333333" if is_dark else "#E0E0E0"
 
+# CSS para tela cheia na câmera quando ativada
+css_fullscreen_camera = ""
+if st.session_state.abrir_camera:
+    css_fullscreen_camera = """
+        div[data-baseweb="tab-list"] { display: none !important; }
+        .fullscreen-scanner {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background-color: #000000 !important;
+            z-index: 999999 !important;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+    """
+
 st.markdown(f"""
     <style>
+    {css_fullscreen_camera}
     .stApp {{
         background-color: {bg_color};
         color: {text_color};
@@ -436,18 +425,6 @@ st.markdown(f"""
         text-align: center;
         padding: 6px 0;
         font-size: 0.85rem;
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: 4px !important;
-    }}
-    
-    div[data-baseweb="tab"] > div {{
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        gap: 4px !important;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -457,58 +434,63 @@ def reproduzir_bip():
     st.components.v1.html(sound_js, height=0)
 
 # ==========================================
-# 7. Abas Inferiores Unificadas (4 Abas)
+# 7. Modo Tela Cheia Exclusivo do Scanner
 # ==========================================
-tab_scanner, tab_compras, tab_perfil, tab_config = st.tabs([
-    t["escanear"], 
-    t["compras"], 
-    t["perfil"], 
-    t["config"]
-])
-
-# --- ABA 1: ESCANEAR ---
-with tab_scanner:
-    st.title("🛒 Scan Market")
-    st.caption(f"{t['saudacao']}, **{st.session_state.usuario_atual}**!")
+if st.session_state.abrir_camera:
+    st.markdown('<div class="fullscreen-scanner">', unsafe_allow_html=True)
+    st.markdown("<p style='color: white; text-align: center; font-size: 1.1rem; margin-bottom: 10px;'>Posicione a linha vermelha sobre o código de barras</p>", unsafe_allow_html=True)
     
-    porcentagem = min(st.session_state.gasto_atual_brl / st.session_state.limite_mensal_brl, 1.0)
-    dias_restantes = max(0, st.session_state.prazo_dias - dias_decorridos)
+    webrtc_streamer(
+        key="scanner_fullscreen",
+        mode=WebRtcMode.SENDRECV,
+        video_processor_factory=BarcodeScannerWithRedLine,
+        media_stream_constraints={"video": {"facingMode": "environment"}, "audio": False},
+        async_processing=True,
+    )
     
-    st.markdown('<div class="budget-card">', unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    with c1:
-        st.caption(t["gasto_mensal"])
-        st.markdown(f"**{fmt_moeda(st.session_state.gasto_atual_brl)}**")
-    with c2:
-        st.caption(t["limite_definido"])
-        st.markdown(f"**{fmt_moeda(st.session_state.limite_mensal_brl)}**")
-    
-    st.progress(porcentagem)
-    st.caption(f"📅 Renovação automática em **{dias_restantes} dias** ({st.session_state.prazo_dias} dias de prazo)")
-
-    if st.session_state.gasto_atual_brl > st.session_state.limite_mensal_brl:
-        st.error(t["alerta_limite"])
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button(t["voltar"], width="stretch"):
+        st.session_state.abrir_camera = False
+        st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    if st.session_state.tocar_som:
-        reproduzir_bip()
-        st.session_state.tocar_som = False
+else:
+    # Interface normal
+    tab_scanner, tab_compras, tab_perfil, tab_config = st.tabs([
+        t["escanear"], 
+        t["compras"], 
+        t["perfil"], 
+        t["config"]
+    ])
 
-    if st.session_state.abrir_camera:
-        st.subheader(t["apontar_camera"])
+    # --- ABA 1: ESCANEAR ---
+    with tab_scanner:
+        st.title("🛒 Scan Market")
+        st.caption(f"{t['saudacao']}, **{st.session_state.usuario_atual}**!")
         
-        webrtc_streamer(
-            key="scanner",
-            mode=WebRtcMode.SENDRECV,
-            video_processor_factory=BarcodeScanner,
-            media_stream_constraints={"video": {"facingMode": "environment"}, "audio": False},
-            async_processing=True,
-        )
+        porcentagem = min(st.session_state.gasto_atual_brl / st.session_state.limite_mensal_brl, 1.0)
+        dias_restantes = max(0, st.session_state.prazo_dias - dias_decorridos)
         
-        if st.button(t["voltar"], width="stretch"):
-            st.session_state.abrir_camera = False
-            st.rerun()
-    else:
+        st.markdown('<div class="budget-card">', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.caption(t["gasto_mensal"])
+            st.markdown(f"**{fmt_moeda(st.session_state.gasto_atual_brl)}**")
+        with c2:
+            st.caption(t["limite_definido"])
+            st.markdown(f"**{fmt_moeda(st.session_state.limite_mensal_brl)}**")
+        
+        st.progress(porcentagem)
+        st.caption(f"📅 Renovação automática em **{dias_restantes} dias** ({st.session_state.prazo_dias} dias de prazo)")
+
+        if st.session_state.gasto_atual_brl > st.session_state.limite_mensal_brl:
+            st.error(t["alerta_limite"])
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if st.session_state.tocar_som:
+            reproduzir_bip()
+            st.session_state.tocar_som = False
+
         if st.button(t["abrir_camera"], width="stretch", type="primary"):
             st.session_state.abrir_camera = True
             st.rerun()
@@ -539,7 +521,7 @@ with tab_scanner:
                 st.markdown(f"<h4 style='margin-top:8px;'>{prod_info['nome']}</h4>", unsafe_allow_html=True)
                 st.markdown(f"<div class='price-tag'>{fmt_moeda(prod_info['preco_brl'])}</div>", unsafe_allow_html=True)
                 st.caption(f"Cód: {codigo}")
-                st.markdown(f"[🔍 Abrir mais fotos no Google]({prod_info['link_google']})")
+                st.markdown(f"[🔍 Pesquisar no Google]({prod_info['link_google']})")
                     
                 qtd = st.number_input(t["quantidade"], min_value=1, max_value=99, value=1, step=1)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -555,220 +537,220 @@ with tab_scanner:
                     st.success(t["item_add"])
                     st.rerun()
             else:
-                st.warning(t["prod_nao_encontrado"])
+                st.warning("⚠️ Produto não encontrado no banco de dados.")
 
-# --- ABA 2: COMPRAS (CARRINHO + HISTÓRICO + TELA GRÁFICA) ---
-with tab_compras:
-    if st.session_state.tela_grafico:
-        st.subheader("📊 Comparativo de Gastos por Período")
-        
-        dados_grafico = []
-        for p in st.session_state.historico_periodos[-3:]:
-            dados_grafico.append({"Período": p["periodo"], "Gasto": p["total_brl"] * cotacoes.get(st.session_state.moeda, 1.0)})
-        dados_grafico.append({"Período": "Atual", "Gasto": st.session_state.gasto_atual_brl * cotacoes.get(st.session_state.moeda, 1.0)})
-
-        df_grafico = pd.DataFrame(dados_grafico).set_index("Período")
-        st.bar_chart(df_grafico, use_container_width=True)
-
-        gasto_anterior = st.session_state.historico_periodos[-1]["total_brl"] if len(st.session_state.historico_periodos) > 0 else 0
-        if st.session_state.gasto_atual_brl <= gasto_anterior:
-            st.success(t["msg_sucesso"])
-        else:
-            st.warning(t["msg_alerta"])
-
-        st.divider()
-        if st.button(t["voltar_historico"], width="stretch"):
-            st.session_state.tela_grafico = False
-            st.rerun()
-
-    else:
-        st.subheader(t["carrinho_secao"])
-        
-        if len(st.session_state.carrinho) == 0:
-            st.info(t["carrinho_vazio"])
-        else:
-            total_brl = sum(item["preco_brl"] * item["quantidade"] for item in st.session_state.carrinho)
+    # --- ABA 2: COMPRAS ---
+    with tab_compras:
+        if st.session_state.tela_grafico:
+            st.subheader("📊 Comparativo de Gastos por Período")
             
-            for idx, item in enumerate(st.session_state.carrinho):
-                col_item, col_btn = st.columns([3, 1])
-                with col_item:
-                    st.write(f"**{item['quantidade']}x {item['nome']}** — {fmt_moeda(item['preco_brl'] * item['quantidade'])}")
-                    st.caption(f"Cód: {item['codigo']}")
-                with col_btn:
-                    if st.button("🗑️", key=f"del_{idx}"):
-                        st.session_state.carrinho.pop(idx)
-                        st.rerun()
-                st.divider()
-                
-            st.metric(label=t["total_compra"], value=fmt_moeda(total_brl))
-            
-            if st.button(t["finalizar"], width="stretch", type="primary"):
-                agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
-                st.session_state.gasto_atual_brl += total_brl
-                
-                st.session_state.historico_compras.insert(0, {
-                    "data": agora,
-                    "total_brl": total_brl,
-                    "itens_qtd": sum(i["quantidade"] for i in st.session_state.carrinho)
-                })
-                
-                st.session_state.carrinho = []
-                st.success(t["compra_feita"])
+            dados_grafico = []
+            for p in st.session_state.historico_periodos[-3:]:
+                dados_grafico.append({"Período": p["periodo"], "Gasto": p["total_brl"] * cotacoes.get(st.session_state.moeda, 1.0)})
+            dados_grafico.append({"Período": "Atual", "Gasto": st.session_state.gasto_atual_brl * cotacoes.get(st.session_state.moeda, 1.0)})
+
+            df_grafico = pd.DataFrame(dados_grafico).set_index("Período")
+            st.bar_chart(df_grafico, use_container_width=True)
+
+            gasto_anterior = st.session_state.historico_periodos[-1]["total_brl"] if len(st.session_state.historico_periodos) > 0 else 0
+            if st.session_state.gasto_atual_brl <= gasto_anterior:
+                st.success(t["msg_sucesso"])
+            else:
+                st.warning(t["msg_alerta"])
+
+            st.divider()
+            if st.button(t["voltar_historico"], width="stretch"):
+                st.session_state.tela_grafico = False
                 st.rerun()
 
-        st.divider()
-
-        st.subheader(t["historico_secao"])
-        
-        if st.button(t["ver_grafico"], width="stretch"):
-            st.session_state.tela_grafico = True
-            st.rerun()
-
-        st.caption("")
-
-        if len(st.session_state.historico_compras) == 0:
-            st.caption(t["historico_vazio"])
         else:
-            for idx_h, compra in enumerate(st.session_state.historico_compras):
-                st.markdown('<div class="history-card">', unsafe_allow_html=True)
-                col_h1, col_h2 = st.columns([2, 1])
-                with col_h1:
-                    st.markdown(f"🗓️ **{compra['data']}**")
-                    st.caption(f"{compra['itens_qtd']} {t['itens_label']}")
-                with col_h2:
-                    st.markdown(f"**{fmt_moeda(compra['total_brl'])}**")
-                st.markdown('</div>', unsafe_allow_html=True)
-
-# --- ABA 3: PERFIL ---
-with tab_perfil:
-    st.subheader(t["perfil"])
-    
-    if st.session_state.get("connected"):
-        user_info = st.session_state.get("user_info", {})
-        col_pic, col_details = st.columns([1, 3])
-        with col_pic:
-            if "picture" in user_info:
-                st.image(user_info["picture"], width=70)
-        with col_details:
-            st.markdown(f"**{user_info.get('name', 'Usuário')}**")
-            st.caption(user_info.get('email', ''))
-
-        st.divider()
-        if st.button(t["sair"], width="stretch"):
-            authenticator.logout()
-            st.rerun()
-
-    elif st.session_state.logado:
-        st.write(f"{t['conectado']}: **{st.session_state.usuario_atual}**")
-        if st.button(t["sair"], width="stretch"):
-            st.session_state.logado = False
-            st.session_state.usuario_atual = "Visitante"
-            st.rerun()
-
-    else:
-        st.write(f"**{t['login_opcional']}**")
-        st.write(f"**{t['ou_social']}**")
-        try:
-            authenticator.login()
-        except Exception:
-            st.info("Login social temporariamente indisponível. Use o acesso por usuário abaixo.")
+            st.subheader(t["carrinho_secao"])
             
-        st.divider()
-        
-        sub_entrar, sub_criar = st.tabs([t["entrar_aba"], t["criar_aba"]])
-        
-        with sub_entrar:
-            u = st.text_input(t["usuario"], key="u_login")
-            s = st.text_input(t["senha"], type="password", key="s_login")
-            if st.button(t["entrar_btn"], width="stretch", type="primary"):
-                if u in st.session_state.usuarios and st.session_state.usuarios[u] == s:
-                    st.session_state.logado = True
-                    st.session_state.usuario_atual = u
-                    st.rerun()
-                else:
-                    st.error("Usuário ou senha incorretos.")
+            if len(st.session_state.carrinho) == 0:
+                st.info(t["carrinho_vazio"])
+            else:
+                total_brl = sum(item["preco_brl"] * item["quantidade"] for item in st.session_state.carrinho)
+                
+                for idx, item in enumerate(st.session_state.carrinho):
+                    col_item, col_btn = st.columns([3, 1])
+                    with col_item:
+                        st.write(f"**{item['quantidade']}x {item['nome']}** — {fmt_moeda(item['preco_brl'] * item['quantidade'])}")
+                        st.caption(f"Cód: {item['codigo']}")
+                    with col_btn:
+                        if st.button("🗑️", key=f"del_{idx}"):
+                            st.session_state.carrinho.pop(idx)
+                            st.rerun()
+                    st.divider()
                     
-        with sub_criar:
-            nu = st.text_input(t["usuario"], key="u_cad")
-            ns = st.text_input(t["senha"], type="password", key="s_cad")
-            cs = st.text_input(t["conf_senha"], type="password", key="c_cad")
+                st.metric(label=t["total_compra"], value=fmt_moeda(total_brl))
+                
+                if st.button(t["finalizar"], width="stretch", type="primary"):
+                    agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+                    st.session_state.gasto_atual_brl += total_brl
+                    
+                    st.session_state.historico_compras.insert(0, {
+                        "data": agora,
+                        "total_brl": total_brl,
+                        "itens_qtd": sum(i["quantidade"] for i in st.session_state.carrinho)
+                    })
+                    
+                    st.session_state.carrinho = []
+                    st.success(t["compra_feita"])
+                    st.rerun()
+
+            st.divider()
+
+            st.subheader(t["historico_secao"])
             
-            if st.button(t["cadastrar_btn"], width="stretch", type="primary"):
-                if not nu or not ns:
-                    st.warning("Preencha todos os campos.")
-                elif nu in st.session_state.usuarios:
-                    st.error("Usuário já existe.")
-                elif ns != cs:
-                    st.error("As senhas não coincidem.")
-                else:
-                    st.session_state.usuarios[nu] = ns
-                    st.success("Conta criada com sucesso! Faça login para continuar.")
+            if st.button(t["ver_grafico"], width="stretch"):
+                st.session_state.tela_grafico = True
+                st.rerun()
 
-# --- ABA 4: CONFIGURAÇÕES ---
-with tab_config:
-    st.subheader(t["config"])
-    
-    tema_sel = st.radio(
-        t["tema"], 
-        options=["Claro", "Escuro"], 
-        index=0 if st.session_state.tema == "Claro" else 1,
-        horizontal=True
-    )
-    if tema_sel != st.session_state.tema:
-        st.session_state.tema = tema_sel
-        st.rerun()
+            st.caption("")
+
+            if len(st.session_state.historico_compras) == 0:
+                st.caption(t["historico_vazio"])
+            else:
+                for idx_h, compra in enumerate(st.session_state.historico_compras):
+                    st.markdown('<div class="history-card">', unsafe_allow_html=True)
+                    col_h1, col_h2 = st.columns([2, 1])
+                    with col_h1:
+                        st.markdown(f"🗓️ **{compra['data']}**")
+                        st.caption(f"{compra['itens_qtd']} {t['itens_label']}")
+                    with col_h2:
+                        st.markdown(f"**{fmt_moeda(compra['total_brl'])}**")
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- ABA 3: PERFIL ---
+    with tab_perfil:
+        st.subheader(t["perfil"])
         
-    st.divider()
-    
-    idioma_sel = st.selectbox(
-        t["idioma"], 
-        options=["PT", "ES", "EN"], 
-        format_func=lambda x: {"PT": "Português 🇧🇷", "ES": "Español 🇪🇸", "EN": "English 🇺🇸"}[x],
-        index=["PT", "ES", "EN"].index(st.session_state.idioma)
-    )
-    if idioma_sel != st.session_state.idioma:
-        st.session_state.idioma = idioma_sel
-        st.rerun()
+        if st.session_state.get("connected"):
+            user_info = st.session_state.get("user_info", {})
+            col_pic, col_details = st.columns([1, 3])
+            with col_pic:
+                if "picture" in user_info:
+                    st.image(user_info["picture"], width=70)
+            with col_details:
+                st.markdown(f"**{user_info.get('name', 'Usuário')}**")
+                st.caption(user_info.get('email', ''))
 
-    st.divider()
+            st.divider()
+            if st.button(t["sair"], width="stretch"):
+                authenticator.logout()
+                st.rerun()
 
-    moeda_sel = st.selectbox(
-        t["moeda"], 
-        options=["BRL", "USD", "ARS"], 
-        format_func=lambda x: {"BRL": "Real (BRL - R$)", "USD": "Dólar (USD - $)", "ARS": "Peso Argentino (ARS - $)"}[x],
-        index=["BRL", "USD", "ARS"].index(st.session_state.moeda)
-    )
-    if moeda_sel != st.session_state.moeda:
-        st.session_state.moeda = moeda_sel
-        st.rerun()
+        elif st.session_state.logado:
+            st.write(f"{t['conectado']}: **{st.session_state.usuario_atual}**")
+            if st.button(t["sair"], width="stretch"):
+                st.session_state.logado = False
+                st.session_state.usuario_atual = "Visitante"
+                st.rerun()
+
+        else:
+            st.write(f"**{t['login_opcional']}**")
+            st.write(f"**{t['ou_social']}**")
+            try:
+                authenticator.login()
+            except Exception:
+                st.info("Login social temporariamente indisponível. Use o acesso por usuário abaixo.")
+                
+            st.divider()
+            
+            sub_entrar, sub_criar = st.tabs([t["entrar_aba"], t["criar_aba"]])
+            
+            with sub_entrar:
+                u = st.text_input(t["usuario"], key="u_login")
+                s = st.text_input(t["senha"], type="password", key="s_login")
+                if st.button(t["entrar_btn"], width="stretch", type="primary"):
+                    if u in st.session_state.usuarios and st.session_state.usuarios[u] == s:
+                        st.session_state.logado = True
+                        st.session_state.usuario_atual = u
+                        st.rerun()
+                    else:
+                        st.error("Usuário ou senha incorretos.")
+                        
+            with sub_criar:
+                nu = st.text_input(t["usuario"], key="u_cad")
+                ns = st.text_input(t["senha"], type="password", key="s_cad")
+                cs = st.text_input(t["conf_senha"], type="password", key="c_cad")
+                
+                if st.button(t["cadastrar_btn"], width="stretch", type="primary"):
+                    if not nu or not ns:
+                        st.warning("Preencha todos os campos.")
+                    elif nu in st.session_state.usuarios:
+                        st.error("Usuário já existe.")
+                    elif ns != cs:
+                        st.error("As senhas não coincidem.")
+                    else:
+                        st.session_state.usuarios[nu] = ns
+                        st.success("Conta criada com sucesso! Faça login para continuar.")
+
+    # --- ABA 4: CONFIGURAÇÕES ---
+    with tab_config:
+        st.subheader(t["config"])
         
-    st.divider()
-    
-    novo_limite = st.number_input(
-        t["limite_label"], 
-        min_value=10.0, 
-        max_value=100000.0, 
-        value=float(st.session_state.limite_mensal_brl),
-        step=50.0
-    )
+        tema_sel = st.radio(
+            t["tema"], 
+            options=["Claro", "Escuro"], 
+            index=0 if st.session_state.tema == "Claro" else 1,
+            horizontal=True
+        )
+        if tema_sel != st.session_state.tema:
+            st.session_state.tema = tema_sel
+            st.rerun()
+            
+        st.divider()
+        
+        idioma_sel = st.selectbox(
+            t["idioma"], 
+            options=["PT", "ES", "EN"], 
+            format_func=lambda x: {"PT": "Português 🇧🇷", "ES": "Español 🇪🇸", "EN": "English 🇺🇸"}[x],
+            index=["PT", "ES", "EN"].index(st.session_state.idioma)
+        )
+        if idioma_sel != st.session_state.idioma:
+            st.session_state.idioma = idioma_sel
+            st.rerun()
 
-    prazos_opcoes = [7, 15, 30]
-    novo_prazo = st.selectbox(
-        t["prazo_label"],
-        options=prazos_opcoes,
-        format_func=lambda x: f"{x} dias",
-        index=prazos_opcoes.index(st.session_state.prazo_dias)
-    )
+        st.divider()
 
-    if st.button(t["salvar_limite"], width="stretch"):
-        st.session_state.limite_mensal_brl = novo_limite
-        st.session_state.prazo_dias = novo_prazo
-        st.success(t["limite_salvo"])
-        st.rerun()
+        moeda_sel = st.selectbox(
+            t["moeda"], 
+            options=["BRL", "USD", "ARS"], 
+            format_func=lambda x: {"BRL": "Real (BRL - R$)", "USD": "Dólar (USD - $)", "ARS": "Peso Argentino (ARS - $)"}[x],
+            index=["BRL", "USD", "ARS"].index(st.session_state.moeda)
+        )
+        if moeda_sel != st.session_state.moeda:
+            st.session_state.moeda = moeda_sel
+            st.rerun()
+            
+        st.divider()
+        
+        novo_limite = st.number_input(
+            t["limite_label"], 
+            min_value=10.0, 
+            max_value=100000.0, 
+            value=float(st.session_state.limite_mensal_brl),
+            step=50.0
+        )
 
-    st.divider()
+        prazos_opcoes = [7, 15, 30]
+        novo_prazo = st.selectbox(
+            t["prazo_label"],
+            options=prazos_opcoes,
+            format_func=lambda x: f"{x} dias",
+            index=prazos_opcoes.index(st.session_state.prazo_dias)
+        )
 
-    if st.button(t["zerar_gastos"], width="stretch"):
-        st.session_state.gasto_atual_brl = 0.00
-        st.success(t["gastos_zerados"])
-        st.rerun()
+        if st.button(t["salvar_limite"], width="stretch"):
+            st.session_state.limite_mensal_brl = novo_limite
+            st.session_state.prazo_dias = novo_prazo
+            st.success(t["limite_salvo"])
+            st.rerun()
+
+        st.divider()
+
+        if st.button(t["zerar_gastos"], width="stretch"):
+            st.session_state.gasto_atual_brl = 0.00
+            st.success(t["gastos_zerados"])
+            st.rerun()
