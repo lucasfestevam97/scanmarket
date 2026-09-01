@@ -269,7 +269,7 @@ if st.session_state.get("connected"):
     st.session_state.logado = True
 
 # ==========================================
-# 5. Estilização CSS e Bottom Bar Fixa com Ícones
+# 5. Estilização CSS com Alinhamento Horizontal nas Abas
 # ==========================================
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
@@ -308,15 +308,30 @@ st.markdown(f"""
         z-index: 99999;
         display: flex; 
         justify-content: space-around;
-        padding: 10px 0;
+        padding: 8px 0;
         border-top: 1px solid {border_color};
         box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
     }}
+    
+    /* Força o alinhamento horizontal (ícone ao lado do texto) */
     div[data-baseweb="tab"] {{
         flex-grow: 1;
         text-align: center;
         padding: 6px 0;
         font-size: 0.85rem;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 4px !important;
+    }}
+    
+    /* Garante alinhamento inline dos nós internos de texto/ícone */
+    div[data-baseweb="tab"] > div {{
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 4px !important;
     }}
     </style>
 """, unsafe_allow_html=True)
