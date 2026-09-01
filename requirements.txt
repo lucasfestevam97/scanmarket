@@ -4,3 +4,4 @@ openpyxl
 opencv-python-headless
 streamlit-webrtc
 bcrypt
+streamlit-google-auth
