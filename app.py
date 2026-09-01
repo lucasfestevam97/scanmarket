@@ -14,13 +14,13 @@ st.set_page_config(
 )
 
 # 2. Configuração do Autenticador do Google
-# O arquivo 'client_secret.json' precisa estar na mesma pasta deste arquivo
+# Certifique-se de que o arquivo 'client_secret.json' está salvo na raiz do repositório
 authenticator = Authenticate(
     secret_credentials_path='client_secret.json',
     cookie_name='scanmarket_google_cookie',
     cookie_key='chave_secreta_scanmarket_123',
     cookie_expiry_days=30,
-    redirect_uri='http://localhost:8501'
+    redirect_uri='https://scanmarket-jpkpuzxo5wwmdqnfeyjssk.streamlit.app/'
 )
 
 # Verifica a sessão do Google ao carregar a página
@@ -225,7 +225,7 @@ if st.session_state.get("connected"):
     st.session_state.usuario_atual = user_info.get("name", user_info.get("email", "Usuário Google"))
     st.session_state.logado = True
 
-# 8. Detector WebRTC
+# 8. Detector WebRTC Atualizado (usando VideoProcessorBase)
 class BarcodeScanner(VideoProcessorBase):
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
@@ -317,6 +317,8 @@ with tab_scanner:
 
     if st.session_state.abrir_camera:
         st.subheader(t["apontar_camera"])
+        
+        # Corrigido: video_processor_factory
         webrtc_streamer(
             key="scanner",
             mode=WebRtcMode.SENDRECV,
@@ -324,11 +326,12 @@ with tab_scanner:
             media_stream_constraints={"video": {"facingMode": "environment"}, "audio": False},
             async_processing=True,
         )
-        if st.button(t["voltar"], use_container_width=True):
+        
+        if st.button(t["voltar"], width="stretch"):
             st.session_state.abrir_camera = False
             st.rerun()
     else:
-        if st.button(t["abrir_camera"], use_container_width=True, type="primary"):
+        if st.button(t["abrir_camera"], width="stretch", type="primary"):
             st.session_state.abrir_camera = True
             st.rerun()
 
@@ -339,7 +342,7 @@ with tab_scanner:
             st.markdown('<div class="product-card">', unsafe_allow_html=True)
             col_img, col_info = st.columns([1, 2])
             with col_img:
-                st.image("https://images.unsplash.com/photo-1588964895597-cfccd6e2dbf9?w=300", use_container_width=True)
+                st.image("https://images.unsplash.com/photo-1588964895597-cfccd6e2dbf9?w=300", width="stretch")
             with col_info:
                 st.markdown(f"<h4 style='margin:0;'>{t['prod_escaneado']}</h4>", unsafe_allow_html=True)
                 st.markdown(f"<div class='price-tag'>{fmt_moeda(preco_base_brl)}</div>", unsafe_allow_html=True)
@@ -348,7 +351,7 @@ with tab_scanner:
             qtd = st.number_input(t["quantidade"], min_value=1, max_value=99, value=1, step=1)
             st.markdown('</div>', unsafe_allow_html=True)
             
-            if st.button(t["add_carrinho"], use_container_width=True, type="primary"):
+            if st.button(t["add_carrinho"], width="stretch", type="primary"):
                 st.session_state.carrinho.append({
                     "codigo": codigo,
                     "nome": t["prod_escaneado"],
@@ -381,7 +384,7 @@ with tab_carrinho:
             
         st.metric(label=t["total_compra"], value=fmt_moeda(total_brl))
         
-        if st.button(t["finalizar"], use_container_width=True, type="primary"):
+        if st.button(t["finalizar"], width="stretch", type="primary"):
             st.session_state.gasto_atual_brl += total_brl
             st.session_state.carrinho = []
             st.success(t["compra_feita"])
@@ -414,7 +417,7 @@ with tab_perfil:
     # 2. Caso esteja Logado via Login Tradicional
     elif st.session_state.logado:
         st.write(f"{t['conectado']}: **{st.session_state.usuario_atual}**")
-        if st.button(t["sair"], use_container_width=True):
+        if st.button(t["sair"], width="stretch"):
             st.session_state.logado = False
             st.session_state.usuario_atual = "Visitante"
             st.rerun()
@@ -433,7 +436,7 @@ with tab_perfil:
         with sub_entrar:
             u = st.text_input(t["usuario"], key="u_login")
             s = st.text_input(t["senha"], type="password", key="s_login")
-            if st.button(t["entrar_btn"], use_container_width=True, type="primary"):
+            if st.button(t["entrar_btn"], width="stretch", type="primary"):
                 if u in st.session_state.usuarios and st.session_state.usuarios[u] == s:
                     st.session_state.logado = True
                     st.session_state.usuario_atual = u
@@ -446,7 +449,7 @@ with tab_perfil:
             ns = st.text_input(t["senha"], type="password", key="s_cad")
             cs = st.text_input(t["conf_senha"], type="password", key="c_cad")
             
-            if st.button(t["cadastrar_btn"], use_container_width=True, type="primary"):
+            if st.button(t["cadastrar_btn"], width="stretch", type="primary"):
                 if not nu or not ns:
                     st.warning("Preencha todos os campos.")
                 elif nu in st.session_state.usuarios:
@@ -508,7 +511,7 @@ with tab_config:
         value=float(st.session_state.limite_mensal_brl),
         step=50.0
     )
-    if st.button(t["salvar_limite"], use_container_width=True):
+    if st.button(t["salvar_limite"], width="stretch"):
         st.session_state.limite_mensal_brl = novo_limite
         st.success(t["limite_salvo"])
         st.rerun()
