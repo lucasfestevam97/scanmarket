@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import requests
 import pandas as pd
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
 from streamlit_google_auth import Authenticate
 
 # ==========================================
@@ -51,6 +51,14 @@ try:
 except Exception:
     pass
 
+# Servidores STUN públicos da Google para estabilizar conexão WebRTC em celulares
+RTC_CONFIG = RTCConfiguration({
+    "iceServers": [
+        {"urls": ["stun:stun.l.google.com:19302"]},
+        {"urls": ["stun:stun1.l.google.com:19302"]}
+    ]
+})
+
 # ==========================================
 # 2. Carregamento do Banco de Dados (.xlsx)
 # ==========================================
@@ -74,10 +82,7 @@ def buscar_produto_por_codigo(codigo):
     if not resultado.empty:
         prod = resultado.iloc[0]
         nome = prod['Nome']
-        
-        # Link de fallback visual simples
         img_url = f"https://placehold.co/400x300/2e7d32/ffffff?text={urllib.parse.quote(nome[:20])}"
-        
         return {
             "nome": nome,
             "preco_brl": float(prod['Preço (R$)']),
@@ -113,10 +118,10 @@ TRADUCOES = {
         "gasto_mensal": "Gasto no Período",
         "limite_definido": "Limite Definido",
         "alerta_limite": "⚠️ Você ultrapassou seu limite!",
-        "voltar": "❌ Cancelar / Sair",
+        "voltar": "❌ Cancelar / Voltar",
         "abrir_camera": "Escanear produto",
         "digitar_manual": "⌨️ Digitar Código Manualmente",
-        "digitar_placeholder": "Insira o código de barras ou ID...",
+        "digitar_placeholder": "Insira o código de barras...",
         "buscar_codigo": "Buscar Produto",
         "quantidade": "Quantidade:",
         "add_carrinho": "➕ Adicionar ao Carrinho",
@@ -148,7 +153,7 @@ TRADUCOES = {
         "ou_social": "Ou entre com",
         "sair": "🔴 Sair da Conta",
         "conectado": "Conectado como",
-        "limite_salvo": "Novo limite e prazo salvos com sucesso!",
+        "limite_salvo": "Novo limite salvo com sucesso!",
         "ver_grafico": "📊 Ver Histórico Visual (Gráfico)",
         "voltar_historico": "⬅️ Voltar ao Histórico",
         "msg_sucesso": "Parabéns, você gastou menos que no período anterior",
@@ -166,7 +171,7 @@ TRADUCOES = {
         "voltar": "❌ Cancelar / Salir",
         "abrir_camera": "Escanear producto",
         "digitar_manual": "⌨️ Ingresar Código Manualmente",
-        "digitar_placeholder": "Ingrese el código de barras...",
+        "digitar_placeholder": "Ingrese el código...",
         "buscar_codigo": "Buscar Producto",
         "quantidade": "Cantidad:",
         "add_carrinho": "➕ Añadir al Carrito",
@@ -268,7 +273,6 @@ class BarcodeScannerWithRedLine(VideoProcessorBase):
         img = frame.to_ndarray(format="bgr24")
         h, w, _ = img.shape
 
-        # Leitura do código de barras
         ok, decoded_info, _, _ = barcode_detector.detectAndDecode(img)
         if ok and decoded_info:
             for info in decoded_info:
@@ -277,7 +281,6 @@ class BarcodeScannerWithRedLine(VideoProcessorBase):
                     st.session_state.abrir_camera = False
                     st.session_state.tocar_som = True
 
-        # Desenha linha vermelha guia centralizada (estilo aplicativo de banco)
         cy = h // 2
         cv2.line(img, (int(w * 0.1), cy), (int(w * 0.9), cy), (0, 0, 255), 4)
 
@@ -355,7 +358,7 @@ if st.session_state.get("connected"):
     st.session_state.logado = True
 
 # ==========================================
-# 6. Estilização CSS + CSS Tela Cheia
+# 6. Estilização CSS
 # ==========================================
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
@@ -363,30 +366,8 @@ card_bg = "#1E1E1E" if is_dark else "#FFFFFF"
 text_color = "#E0E0E0" if is_dark else "#212529"
 border_color = "#333333" if is_dark else "#E0E0E0"
 
-# CSS para tela cheia na câmera quando ativada
-css_fullscreen_camera = ""
-if st.session_state.abrir_camera:
-    css_fullscreen_camera = """
-        div[data-baseweb="tab-list"] { display: none !important; }
-        .fullscreen-scanner {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            background-color: #000000 !important;
-            z-index: 999999 !important;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-    """
-
 st.markdown(f"""
     <style>
-    {css_fullscreen_camera}
     .stApp {{
         background-color: {bg_color};
         color: {text_color};
@@ -434,25 +415,47 @@ def reproduzir_bip():
     st.components.v1.html(sound_js, height=0)
 
 # ==========================================
-# 7. Modo Tela Cheia Exclusivo do Scanner
+# 7. Modo Scanner
 # ==========================================
 if st.session_state.abrir_camera:
-    st.markdown('<div class="fullscreen-scanner">', unsafe_allow_html=True)
-    st.markdown("<p style='color: white; text-align: center; font-size: 1.1rem; margin-bottom: 10px;'>Posicione a linha vermelha sobre o código de barras</p>", unsafe_allow_html=True)
-    
+    st.subheader("📷 Leitor de Código de Barras")
+    st.caption("Centralize a linha vermelha sobre as barras do produto.")
+
     webrtc_streamer(
-        key="scanner_fullscreen",
+        key="scanner_stream",
         mode=WebRtcMode.SENDRECV,
+        rtc_configuration=RTC_CONFIG,
         video_processor_factory=BarcodeScannerWithRedLine,
-        media_stream_constraints={"video": {"facingMode": "environment"}, "audio": False},
+        media_stream_constraints={
+            "video": {"facingMode": "environment"},
+            "audio": False
+        },
         async_processing=True,
     )
+
+    st.divider()
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    # Fallback: Tirar foto com a câmera padrão do celular
+    st.caption("Alternativa: Tire uma foto do código de barras se a transmissão falhar:")
+    foto = st.camera_input("Tirar foto do código de barras")
+    if foto is not None:
+        bytes_data = foto.getvalue()
+        cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+        ok, decoded_info, _, _ = barcode_detector.detectAndDecode(cv2_img)
+        if ok and decoded_info:
+            for info in decoded_info:
+                if info:
+                    st.session_state.ultimo_codigo = info
+                    st.session_state.abrir_camera = False
+                    st.session_state.tocar_som = True
+                    st.rerun()
+        else:
+            st.warning("Não foi possível ler o código na foto. Tente aproximar ou focar melhor.")
+
+    st.divider()
     if st.button(t["voltar"], width="stretch"):
         st.session_state.abrir_camera = False
         st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
 
 else:
     # Interface normal
