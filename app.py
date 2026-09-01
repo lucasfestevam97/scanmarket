@@ -50,9 +50,6 @@ try:
 except Exception:
     pass
 
-# Detector de código de barras OpenCV
-barcode_detector = cv2.barcode.BarcodeDetector()
-
 # ==========================================
 # 2. Carregamento do Banco de Dados (.xlsx)
 # ==========================================
@@ -307,6 +304,15 @@ if "historico_periodos" not in st.session_state:
         {"periodo": "Período -1", "total_brl": 410.00}
     ]
 
+# Leitura via parâmetros de URL (passados pelo leitor JS automático)
+query_params = st.query_params
+if "barcode" in query_params:
+    st.session_state.ultimo_codigo = query_params["barcode"]
+    st.session_state.abrir_camera = False
+    st.session_state.tocar_som = True
+    st.query_params.clear()
+    st.rerun()
+
 hoje = datetime.date.today()
 dias_decorridos = (hoje - st.session_state.data_inicio_ciclo).days
 
@@ -332,7 +338,7 @@ if st.session_state.get("connected"):
     st.session_state.logado = True
 
 # ==========================================
-# 5. Estilização CSS Geral e Overlay da Câmera
+# 5. Estilização CSS Geral
 # ==========================================
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
@@ -381,43 +387,6 @@ st.markdown(f"""
         padding: 6px 0;
         font-size: 0.85rem;
     }}
-
-    /* CSS do Scanner Estilo Foto Exemplo */
-    div[data-testid="stCameraInput"] {{
-        position: relative;
-        border: 2px solid #555555;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0px 4px 15px rgba(0,0,0,0.4);
-    }}
-    
-    /* Linha vermelha central */
-    div[data-testid="stCameraInput"]::after {{
-        content: "";
-        position: absolute;
-        top: 50%;
-        left: 5%;
-        right: 5%;
-        height: 3px;
-        background-color: #ff0000;
-        box-shadow: 0 0 8px rgba(255, 0, 0, 0.9);
-        z-index: 10;
-        pointer-events: none;
-    }}
-
-    /* Moldura de enquadramento amarela */
-    div[data-testid="stCameraInput"]::before {{
-        content: "";
-        position: absolute;
-        top: 22%;
-        bottom: 22%;
-        left: 6%;
-        right: 6%;
-        border: 2px solid #ffcc00;
-        border-radius: 8px;
-        z-index: 9;
-        pointer-events: none;
-    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -426,33 +395,114 @@ def reproduzir_bip():
     st.components.v1.html(sound_js, height=0)
 
 # ==========================================
-# 6. Modo Scanner Nativo (Sem WebRTC)
+# 6. Modo Scanner Automático HTML5 / JS
 # ==========================================
 if st.session_state.abrir_camera:
-    st.markdown(f"<p style='text-align:center; font-weight:600; font-size:1.1rem;'>{t['instrucao_camera']}</p>", unsafe_allow_html=True)
-    
-    foto_capturada = st.camera_input("Scanner", key="camera_scanner", label_visibility="collapsed")
+    scanner_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script src="https://unpkg.com/@zxing/library@latest"></script>
+        <style>
+            body {{
+                margin: 0;
+                padding: 0;
+                background-color: #000;
+                color: #fff;
+                font-family: sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                overflow: hidden;
+            }}
+            #interactive {{
+                position: relative;
+                width: 100%;
+                max-width: 640px;
+                height: 280px;
+                overflow: hidden;
+                border-radius: 12px;
+                border: 2px solid #fff;
+            }}
+            video {{
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }}
+            .red-line {{
+                position: absolute;
+                top: 50%;
+                left: 5%;
+                right: 5%;
+                height: 3px;
+                background-color: red;
+                box-shadow: 0 0 8px red;
+                z-index: 10;
+            }}
+            .yellow-box {{
+                position: absolute;
+                top: 20%;
+                bottom: 20%;
+                left: 10%;
+                right: 10%;
+                border: 2px solid #ffcc00;
+                border-radius: 8px;
+                z-index: 9;
+            }}
+            .rotate-warning {{
+                display: none;
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.92);
+                z-index: 9999;
+                color: #fff;
+                text-align: center;
+                padding: 40px 20px;
+                font-size: 1.2rem;
+            }}
+            @media screen and (orientation: portrait) {{
+                .rotate-warning {{
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="rotate-warning">
+            <div style="font-size: 3rem; margin-bottom: 15px;">🔄</div>
+            <b>Por favor, vire o celular na horizontal</b>
+            <p style="font-size: 0.9rem; color: #ccc;">Para melhor alinhamento e leitura do código de barras.</p>
+        </div>
 
-    if foto_capturada is not None:
-        bytes_data = foto_capturada.getvalue()
-        img_np = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+        <p style="margin-bottom: 10px; font-weight: bold; text-align: center;">{t['instrucao_camera']}</p>
         
-        ok, decoded_info, _, _ = barcode_detector.detectAndDecode(img_np)
-        
-        if ok and decoded_info:
-            codigo_encontrado = [c for c in decoded_info if c]
-            if codigo_encontrado:
-                st.session_state.ultimo_codigo = codigo_encontrado[0]
-                st.session_state.abrir_camera = False
-                st.session_state.tocar_som = True
-                st.rerun()
-            else:
-                st.error("Não foi possível decodificar o código. Tente focar melhor e tire a foto novamente.")
-        else:
-            st.error("Nenhum código de barras detectado. Alinhe a linha vermelha ao código e tente novamente.")
+        <div id="interactive">
+            <video id="video"></video>
+            <div class="red-line"></div>
+            <div class="yellow-box"></div>
+        </div>
+
+        <script>
+            const codeReader = new ZXing.BrowserMultiFormatReader();
+            codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {{
+                if (result) {{
+                    // Leitura automática detectada: envia para a aplicação
+                    window.parent.location.href = window.parent.location.pathname + '?barcode=' + encodeURIComponent(result.text);
+                }}
+            }}).catch(err => console.error(err));
+        </script>
+    </body>
+    </html>
+    """
+    
+    st.components.v1.html(scanner_html, height=420)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    
     if st.button(t["voltar"], type="secondary", use_container_width=True):
         st.session_state.abrir_camera = False
         st.rerun()
