@@ -51,7 +51,36 @@ except Exception:
     pass
 
 # ==========================================
-# 2. Cotações e Traduções
+# 2. Carregamento do Banco de Dados (.xlsx)
+# ==========================================
+@st.cache_data
+def carregar_banco_dados():
+    try:
+        df = pd.read_excel("banco_de_dados_app.xlsx")
+        df['Código de Barras'] = df['Código de Barras'].astype(str).str.strip()
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar o banco de dados: {e}")
+        return pd.DataFrame()
+
+df_produtos = carregar_banco_dados()
+
+def buscar_produto_por_codigo(codigo):
+    if df_produtos.empty:
+        return None
+    codigo_str = str(codigo).strip()
+    resultado = df_produtos[df_produtos['Código de Barras'] == codigo_str]
+    if not resultado.empty:
+        prod = resultado.iloc[0]
+        return {
+            "nome": prod['Nome'],
+            "preco_brl": float(prod['Preço (R$)']),
+            "link": prod['Link']
+        }
+    return None
+
+# ==========================================
+# 3. Cotações e Traduções
 # ==========================================
 @st.cache_data(ttl=3600)
 def obter_cotacoes():
@@ -84,6 +113,7 @@ TRADUCOES = {
         "digitar_placeholder": "Insira o código de barras ou ID do produto...",
         "buscar_codigo": "Buscar Produto",
         "prod_escaneado": "Produto Escaneado",
+        "prod_nao_encontrado": "⚠️ Produto não encontrado no banco de dados.",
         "quantidade": "Quantidade:",
         "add_carrinho": "➕ Adicionar ao Carrinho",
         "item_add": "Item(ns) adicionado(s) ao carrinho!",
@@ -139,6 +169,7 @@ TRADUCOES = {
         "digitar_placeholder": "Ingrese el código de barras o ID...",
         "buscar_codigo": "Buscar Producto",
         "prod_escaneado": "Producto Escaneado",
+        "prod_nao_encontrado": "⚠️ Producto no encontrado en la base de datos.",
         "quantidade": "Cantidad:",
         "add_carrinho": "➕ Añadir al Carrito",
         "item_add": "¡Artículo(s) añadido(s) al carrito!",
@@ -194,6 +225,7 @@ TRADUCOES = {
         "digitar_placeholder": "Enter barcode or product ID...",
         "buscar_codigo": "Search Product",
         "prod_escaneado": "Scanned Product",
+        "prod_nao_encontrado": "⚠️ Product not found in database.",
         "quantidade": "Quantity:",
         "add_carrinho": "➕ Add to Cart",
         "item_add": "Item(s) added to cart!",
@@ -238,7 +270,7 @@ TRADUCOES = {
 SIMBOLOS = {"BRL": "R$", "USD": "$", "ARS": "$"}
 
 # ==========================================
-# 3. Processador de Vídeo OpenCV
+# 4. Processador de Vídeo OpenCV
 # ==========================================
 barcode_detector = cv2.barcode.BarcodeDetector()
 
@@ -255,7 +287,7 @@ class BarcodeScanner(VideoProcessorBase):
         return frame.from_ndarray(img, format="bgr24")
 
 # ==========================================
-# 4. Estados da Sessão e Lógica do Ciclo
+# 5. Estados da Sessão e Lógica do Ciclo
 # ==========================================
 if "logado" not in st.session_state:
     st.session_state.logado = False
@@ -283,11 +315,9 @@ if "carrinho" not in st.session_state:
 if "historico_compras" not in st.session_state:
     st.session_state.historico_compras = []
 
-# Estado para controlar a navegação de telas (Ex: Visualização Gráfica)
 if "tela_grafico" not in st.session_state:
     st.session_state.tela_grafico = False
 
-# Configuração de Limite e Prazo
 if "limite_mensal_brl" not in st.session_state:
     st.session_state.limite_mensal_brl = 500.00
 if "prazo_dias" not in st.session_state:
@@ -297,14 +327,12 @@ if "data_inicio_ciclo" not in st.session_state:
 if "gasto_atual_brl" not in st.session_state:
     st.session_state.gasto_atual_brl = 0.00
 
-# Histórico de períodos anteriores para o gráfico
 if "historico_periodos" not in st.session_state:
     st.session_state.historico_periodos = [
         {"periodo": "Período -2", "total_brl": 320.00},
         {"periodo": "Período -1", "total_brl": 410.00}
     ]
 
-# Verificação e Reset Automático por Vencimento do Prazo
 hoje = datetime.date.today()
 dias_decorridos = (hoje - st.session_state.data_inicio_ciclo).days
 
@@ -330,7 +358,7 @@ if st.session_state.get("connected"):
     st.session_state.logado = True
 
 # ==========================================
-# 5. Estilização CSS
+# 6. Estilização CSS
 # ==========================================
 is_dark = st.session_state.tema == "Escuro"
 bg_color = "#121212" if is_dark else "#F8F9FA"
@@ -399,7 +427,7 @@ def reproduzir_bip():
     st.components.v1.html(sound_js, height=0)
 
 # ==========================================
-# 6. Abas Inferiores Unificadas (4 Abas)
+# 7. Abas Inferiores Unificadas (4 Abas)
 # ==========================================
 tab_scanner, tab_compras, tab_perfil, tab_config = st.tabs([
     t["escanear"], 
@@ -468,34 +496,36 @@ with tab_scanner:
 
         if st.session_state.ultimo_codigo:
             codigo = st.session_state.ultimo_codigo
-            preco_base_brl = 12.90
+            prod_info = buscar_produto_por_codigo(codigo)
             
-            st.markdown('<div class="product-card">', unsafe_allow_html=True)
-            col_img, col_info = st.columns([1, 2])
-            with col_img:
-                st.image("https://images.unsplash.com/photo-1588964895597-cfccd6e2dbf9?w=300", width="stretch")
-            with col_info:
-                st.markdown(f"<h4 style='margin:0;'>{t['prod_escaneado']}</h4>", unsafe_allow_html=True)
-                st.markdown(f"<div class='price-tag'>{fmt_moeda(preco_base_brl)}</div>", unsafe_allow_html=True)
-                st.caption(f"Cód: {codigo}")
+            if prod_info:
+                st.markdown('<div class="product-card">', unsafe_allow_html=True)
+                col_img, col_info = st.columns([1, 2])
+                with col_img:
+                    st.image(prod_info["link"], width="stretch")
+                with col_info:
+                    st.markdown(f"<h4 style='margin:0;'>{prod_info['nome']}</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='price-tag'>{fmt_moeda(prod_info['preco_brl'])}</div>", unsafe_allow_html=True)
+                    st.caption(f"Cód: {codigo}")
+                    
+                qtd = st.number_input(t["quantidade"], min_value=1, max_value=99, value=1, step=1)
+                st.markdown('</div>', unsafe_allow_html=True)
                 
-            qtd = st.number_input(t["quantidade"], min_value=1, max_value=99, value=1, step=1)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            if st.button(t["add_carrinho"], width="stretch", type="primary"):
-                st.session_state.carrinho.append({
-                    "codigo": codigo,
-                    "nome": t["prod_escaneado"],
-                    "preco_brl": preco_base_brl,
-                    "quantidade": qtd
-                })
-                st.session_state.ultimo_codigo = None
-                st.success(t["item_add"])
-                st.rerun()
+                if st.button(t["add_carrinho"], width="stretch", type="primary"):
+                    st.session_state.carrinho.append({
+                        "codigo": codigo,
+                        "nome": prod_info["nome"],
+                        "preco_brl": prod_info["preco_brl"],
+                        "quantidade": qtd
+                    })
+                    st.session_state.ultimo_codigo = None
+                    st.success(t["item_add"])
+                    st.rerun()
+            else:
+                st.warning(t["prod_nao_encontrado"])
 
 # --- ABA 2: COMPRAS (CARRINHO + HISTÓRICO + TELA GRÁFICA) ---
 with tab_compras:
-    # SE A TELA GRÁFICA ESTIVER ATIVA, ABRE UMA NOVA TELA COMPLETA
     if st.session_state.tela_grafico:
         st.subheader("📊 Comparativo de Gastos por Período")
         
@@ -519,7 +549,6 @@ with tab_compras:
             st.rerun()
 
     else:
-        # 1. SEÇÃO DO CARRINHO
         st.subheader(t["carrinho_secao"])
         
         if len(st.session_state.carrinho) == 0:
@@ -556,10 +585,8 @@ with tab_compras:
 
         st.divider()
 
-        # 2. SEÇÃO DO HISTÓRICO DE COMPRAS
         st.subheader(t["historico_secao"])
         
-        # Botão para ABRIR A NOVA TELA DO GRÁFICO
         if st.button(t["ver_grafico"], width="stretch"):
             st.session_state.tela_grafico = True
             st.rerun()
