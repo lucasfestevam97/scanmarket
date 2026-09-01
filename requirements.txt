@@ -1,5 +1,0 @@
-streamlit
-pandas
-openpyxl
-opencv-python-headless
-streamlit-webrtc
