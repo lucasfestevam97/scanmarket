@@ -1,212 +1,148 @@
+import os
 import cv2
 import numpy as np
-import customtkinter as ctk
-from PIL import Image, ImageTk
+import pandas as pd
+import streamlit as st
 from pyzbar.pyzbar import decode
-import tkinter as tk
-from tkinter import filedialog, messagebox
+from PIL import Image
 
-# Configuração do tema da interface
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
+# Configuração inicial da página Streamlit
+st.set_page_config(
+    page_title="Scan Market - Leitor",
+    page_icon="🛒",
+    layout="centered"
+)
 
+# ---------------------------------------------------------
+# Funções de Processamento de Imagem (OpenCV / PyZbar)
+# ---------------------------------------------------------
+def rotacionar_imagem(img, angulo):
+    if angulo == 90:
+        return cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+    elif angulo == 180:
+        return cv2.rotate(img, cv2.ROTATE_180)
+    elif angulo == 270:
+        return cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return img
 
-class LeitorCodigoBarrasApp(ctk.CTk):
-    def __init__(self):
-        super().__init__()
+def aplicar_filtros(img_gray):
+    variacoes = [("Original (Cinza)", img_gray)]
+    
+    # Zoom 2x
+    resized = cv2.resize(img_gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    variacoes.append(("Zoom 2x", resized))
+    
+    # CLAHE (Contraste Adaptativo)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    variacoes.append(("Contraste CLAHE", clahe.apply(img_gray)))
+    
+    # Threshold Adaptativo
+    thresh = cv2.adaptiveThreshold(
+        img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 10
+    )
+    variacoes.append(("Threshold Adaptativo", thresh))
+    
+    # Blur + Otsu
+    blur = cv2.GaussianBlur(img_gray, (5, 5), 0)
+    _, thresh_otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    variacoes.append(("Filtro Otsu", thresh_otsu))
+    
+    return variacoes
 
-        self.title("Leitor de Código de Barras Avançado")
-        self.geometry("900x650")
-        self.resizable(False, False)
+def decodificar_com_fallback(file_bytes):
+    # Converter bytes da imagem recebida para OpenCV
+    np_arr = np.frombuffer(file_bytes, np.uint8)
+    img_original = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-        self.caminho_imagem = None
-        self.codigo_detectado = None
+    if img_original is None:
+        return None, "Erro ao carregar a imagem."
 
-        self._criar_interface()
+    angulos = [0, 90, 180, 270]
+    for angulo in angulos:
+        img_rot = rotacionar_imagem(img_original, angulo)
+        img_gray = cv2.cvtColor(img_rot, cv2.COLOR_BGR2GRAY)
+        
+        for nome_filtro, img_proc in aplicar_filtros(img_gray):
+            barcodes = decode(img_proc)
+            if barcodes:
+                res = []
+                for b in barcodes:
+                    res.append({
+                        "codigo": b.data.decode("utf-8"),
+                        "tipo": b.type,
+                        "angulo": angulo,
+                        "filtro": nome_filtro
+                    })
+                return res, None
 
-    def _criar_interface(self):
-        # --- TÍTULO ---
-        self.lbl_titulo = ctk.CTkLabel(
-            self, text="Leitor & Processador de Código de Barras", font=("Arial", 22, "bold")
-        )
-        self.lbl_titulo.pack(pady=15)
+    return None, "Nenhum código de barras identificado após tentar todas as rotações e filtros."
 
-        # --- PAINEL PRINCIPAL ---
-        self.frame_conteudo = ctk.CTkFrame(self)
-        self.frame_conteudo.pack(fill="both", expand=True, padx=20, pady=10)
+# ---------------------------------------------------------
+# Interface do Usuário (Streamlit)
+# ---------------------------------------------------------
+st.title("🛒 Scan Market - Leitor de Código de Barras")
 
-        # Esquerda: Visualização da Imagem
-        self.frame_imagem = ctk.CTkFrame(self.frame_conteudo, width=450, height=400)
-        self.frame_imagem.pack(side="left", padx=15, pady=15, fill="both", expand=True)
+# Leitura de parâmetros repassados pela câmera JS
+query_params = st.query_params
+if "barcode" in query_params:
+    st.success(f"✅ Código lido via Câmera: **{query_params['barcode']}**")
 
-        self.lbl_preview = ctk.CTkLabel(
-            self.frame_imagem, text="Nenhuma imagem carregada", font=("Arial", 14)
-        )
-        self.lbl_preview.pack(expand=True)
+aba_camera, aba_upload = st.tabs(["📷 Câmera (Automática)", "📁 Upload de Imagem"])
 
-        # Direita: Controles e Resultados
-        self.frame_controles = ctk.CTkFrame(self.frame_conteudo, width=350)
-        self.frame_controles.pack(side="right", padx=15, pady=15, fill="both", expand=True)
+# ABA 1: Câmera com Leitura Contínua e Rotação Automática (JS)
+with aba_camera:
+    st.write("Aponte a câmera para o código de barras. A leitura ocorre automaticamente assim que enquadrado.")
+    
+    scanner_html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script src="https://unpkg.com/@zxing/library@latest"></script>
+        <style>
+            body { margin: 0; background: #000; color: #fff; text-align: center; font-family: sans-serif; }
+            #container { position: relative; width: 100%; max-width: 500px; height: 280px; margin: 0 auto; overflow: hidden; border-radius: 10px; border: 2px solid #333; }
+            video { width: 100%; height: 100%; object-fit: cover; }
+            .line { position: absolute; top: 50%; left: 10%; right: 10%; height: 2px; background: red; box-shadow: 0 0 6px red; z-index: 10; }
+            .rotate-msg { display: none; position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.9); z-index: 99; color: #fff; padding-top: 20%; font-size: 1.2rem; }
+            @media screen and (orientation: portrait) { .rotate-msg { display: block; } }
+        </style>
+    </head>
+    <body>
+        <div class="rotate-msg">🔄 Vire o celular na horizontal para alinhar a leitura.</div>
+        <div id="container">
+            <video id="video"></video>
+            <div class="line"></div>
+        </div>
+        <script>
+            const codeReader = new ZXing.BrowserMultiFormatReader();
+            codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
+                if (result) {
+                    window.parent.location.href = window.parent.location.pathname + '?barcode=' + encodeURIComponent(result.text);
+                }
+            }).catch(err => console.error(err));
+        </script>
+    </body>
+    </html>
+    """
+    st.components.v1.html(scanner_html, height=330)
 
-        self.btn_carregar = ctk.CTkButton(
-            self.frame_controles, text="📁 Selecionar Imagem", command=self.carregar_imagem, height=40
-        )
-        self.btn_carregar.pack(fill="x", padx=15, pady=15)
-
-        self.btn_processar = ctk.CTkButton(
-            self.frame_controles,
-            text="🔍 Ler Código de Barras",
-            command=self.processar_imagem,
-            height=40,
-            fg_color="green",
-            hover_color="darkgreen",
-            state="disabled"
-        )
-        self.btn_processar.pack(fill="x", padx=15, pady=5)
-
-        self.lbl_status = ctk.CTkLabel(
-            self.frame_controles, text="Aguardando imagem...", font=("Arial", 12), text_color="gray"
-        )
-        self.lbl_status.pack(pady=15)
-
-        # Resultados
-        self.lbl_resultado_titulo = ctk.CTkLabel(
-            self.frame_controles, text="Resultado da Leitura:", font=("Arial", 14, "bold")
-        )
-        self.lbl_resultado_titulo.pack(anchor="w", padx=15, pady=(10, 5))
-
-        self.txt_resultado = ctk.CTkTextbox(self.frame_controles, height=100, font=("Consolas", 13))
-        self.txt_resultado.pack(fill="x", padx=15, pady=5)
-
-        self.btn_copiar = ctk.CTkButton(
-            self.frame_controles,
-            text="📋 Copiar Código",
-            command=self.copiar_codigo,
-            height=30,
-            state="disabled"
-        )
-        self.btn_copiar.pack(fill="x", padx=15, pady=10)
-
-    def carregar_imagem(self):
-        caminho = filedialog.askopenfilename(
-            filetypes=[("Imagens", "*.jpg *.jpeg *.png *.bmp *.webp")]
-        )
-        if caminho:
-            self.caminho_imagem = caminho
-            self.exibir_preview(caminho)
-            self.btn_processar.configure(state="normal")
-            self.lbl_status.configure(text="Imagem carregada. Clique em 'Ler Código'.", text_color="white")
-            self.txt_resultado.delete("1.0", tk.END)
-            self.btn_copiar.configure(state="disabled")
-
-    def exibir_preview(self, img_source):
-        if isinstance(img_source, str):
-            img = Image.open(img_source)
-        else:
-            img = Image.fromarray(cv2.cvtColor(img_source, cv2.COLOR_BGR2RGB))
-
-        # Redimensiona para caber na tela sem distorcer
-        img.thumbnail((400, 380))
-        img_tk = ImageTk.PhotoImage(img)
-
-        self.lbl_preview.configure(image=img_tk, text="")
-        self.lbl_preview.image = img_tk
-
-    def rotacionar_imagem(self, img, angulo):
-        if angulo == 90:
-            return cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-        elif angulo == 180:
-            return cv2.rotate(img, cv2.ROTATE_180)
-        elif angulo == 270:
-            return cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        return img
-
-    def gerar_variacoes(self, img_gray):
-        variacoes = []
-        variacoes.append(("Cinza Simples", img_gray))
-
-        # Zoom 2x
-        resized = cv2.resize(img_gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-        variacoes.append(("Zoom 2x", resized))
-
-        # Ajuste de Contraste (CLAHE)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-        variacoes.append(("Ajuste de Contraste (CLAHE)", clahe.apply(img_gray)))
-
-        # Limiarização Adaptativa (Preto e Branco puro)
-        thresh = cv2.adaptiveThreshold(
-            img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 10
-        )
-        variacoes.append(("Threshold Adaptativo", thresh))
-
-        # Suavização + Otsu
-        blur = cv2.GaussianBlur(img_gray, (5, 5), 0)
-        _, thresh_otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        variacoes.append(("Filtro Otsu", thresh_otsu))
-
-        return variacoes
-
-    def processar_imagem(self):
-        if not self.caminho_imagem:
-            return
-
-        self.lbl_status.configure(text="Processando variações...", text_color="yellow")
-        self.update()
-
-        img_original = cv2.imread(self.caminho_imagem)
-        if img_original is None:
-            messagebox.showerror("Erro", "Não foi possível carregar a imagem.")
-            return
-
-        angulos = [0, 90, 180, 270]
-        sucesso = False
-
-        for angulo in angulos:
-            img_rotacionada = self.rotacionar_imagem(img_original, angulo)
-            img_gray = cv2.cvtColor(img_rotacionada, cv2.COLOR_BGR2GRAY)
-
-            variacoes = self.gerar_variacoes(img_gray)
-
-            for nome_tecnica, img_processada in variacoes:
-                barcodes = decode(img_processada)
-
-                if barcodes:
-                    sucesso = True
-                    self.exibir_preview(img_rotacionada)
-                    
-                    # Formatar resultados
-                    texto_resultado = ""
-                    codigos = []
-                    for barcode in barcodes:
-                        dado = barcode.data.decode("utf-8")
-                        tipo = barcode.type
-                        codigos.append(dado)
-                        texto_resultado += f"Código: {dado}\nTipo: {tipo}\nRotação: {angulo}°\nTécnica: {nome_tecnica}\n\n"
-
-                    self.codigo_detectado = "\n".join(codigos)
-                    self.txt_resultado.delete("1.0", tk.END)
-                    self.txt_resultado.insert("1.0", texto_resultado)
-
-                    self.lbl_status.configure(text="✅ Código lido com sucesso!", text_color="lightgreen")
-                    self.btn_copiar.configure(state="normal")
-                    break
-
-            if sucesso:
-                break
-
-        if not sucesso:
-            self.lbl_status.configure(text="❌ Falha ao ler código de barras.", text_color="red")
-            self.txt_resultado.delete("1.0", tk.END)
-            self.txt_resultado.insert("1.0", "Nenhum código foi identificado após tentar todas as rotações e filtros.")
-            self.btn_copiar.configure(state="disabled")
-
-    def copiar_codigo(self):
-        if self.codigo_detectado:
-            self.clipboard_clear()
-            self.clipboard_append(self.codigo_detectado)
-            messagebox.showinfo("Sucesso", "Código copiado para a área de transferência!")
-
-
-if __name__ == "__main__":
-    app = LeitorCodigoBarrasApp()
-    app.mainloop()
+# ABA 2: Upload com Pipeline Completo (OpenCV / PyZbar)
+with aba_upload:
+    st.write("Envie uma foto da sua galeria/computador caso o código esteja borrado ou em ângulo difícil.")
+    
+    arquivo = st.file_uploader("Selecione uma imagem", type=["jpg", "jpeg", "png", "webp"])
+    
+    if arquivo is not None:
+        file_bytes = arquivo.read()
+        st.image(file_bytes, caption="Imagem Enviada", use_container_width=True)
+        
+        if st.button("🔍 Processar e Ler Código", type="primary", use_container_width=True):
+            with st.spinner("Analisando rotações e aplicando filtros de imagem..."):
+                resultados, erro = decodificar_com_fallback(file_bytes)
+                
+                if resultados:
+                    for res in resultados:
+                        st.success(f"**Código Encontrado:** `{res['codigo']}`")
+                        st.info(f"**Tipo:** {res['tipo']} | **Ajuste de Ângulo:** {res['angulo']}° | **Filtro Aplicado:** {res['filtro']}")
+                else:
+                    st.error(erro)
