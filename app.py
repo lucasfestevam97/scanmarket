@@ -118,7 +118,8 @@ TRADUCOES = {
         "sair": "🔴 Sair da Conta",
         "conectado": "Conectado como",
         "limite_salvo": "Novo limite e prazo salvos com sucesso!",
-        "ver_historico": "📊 Ver histórico de gastos",
+        "ver_grafico": "📊 Ver Histórico Visual (Gráfico)",
+        "voltar_historico": "⬅️ Voltar ao Histórico",
         "msg_sucesso": "Parabéns, você gastou menos que no período anterior",
         "msg_alerta": "Você gastou um pouco mais ultimamente."
     },
@@ -172,7 +173,8 @@ TRADUCOES = {
         "sair": "🔴 Cerrar Sesión",
         "conectado": "Conectado como",
         "limite_salvo": "¡Nuevo límite y plazo guardados!",
-        "ver_historico": "📊 Ver historial de gastos",
+        "ver_grafico": "📊 Ver Historial Visual (Gráfico)",
+        "voltar_historico": "⬅️ Volver al Historial",
         "msg_sucesso": "Felicitaciones, gastaste menos que en el período anterior",
         "msg_alerta": "Has gastado un poco más últimamente."
     },
@@ -226,7 +228,8 @@ TRADUCOES = {
         "sair": "🔴 Log Out",
         "conectado": "Connected as",
         "limite_salvo": "New limit and period saved successfully!",
-        "ver_historico": "📊 View spending history",
+        "ver_grafico": "📊 View Visual History (Chart)",
+        "voltar_historico": "⬅️ Back to History",
         "msg_sucesso": "Congratulations, you spent less than in the previous period",
         "msg_alerta": "You spent a bit more recently."
     }
@@ -279,6 +282,10 @@ if "carrinho" not in st.session_state:
     st.session_state.carrinho = []
 if "historico_compras" not in st.session_state:
     st.session_state.historico_compras = []
+
+# Estado para controlar a navegação de telas (Ex: Visualização Gráfica)
+if "tela_grafico" not in st.session_state:
+    st.session_state.tela_grafico = False
 
 # Configuração de Limite e Prazo
 if "limite_mensal_brl" not in st.session_state:
@@ -425,22 +432,6 @@ with tab_scanner:
         st.error(t["alerta_limite"])
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # GRÁFICO EXPANDÍVEL DE HISTÓRICO DE GASTOS
-    with st.expander(t["ver_historico"], expanded=False):
-        dados_grafico = []
-        for p in st.session_state.historico_periodos[-3:]:
-            dados_grafico.append({"Período": p["periodo"], "Gasto": p["total_brl"] * cotacoes.get(st.session_state.moeda, 1.0)})
-        dados_grafico.append({"Período": "Atual", "Gasto": st.session_state.gasto_atual_brl * cotacoes.get(st.session_state.moeda, 1.0)})
-
-        df_grafico = pd.DataFrame(dados_grafico).set_index("Período")
-        st.bar_chart(df_grafico, use_container_width=True)
-
-        gasto_anterior = st.session_state.historico_periodos[-1]["total_brl"] if len(st.session_state.historico_periodos) > 0 else 0
-        if st.session_state.gasto_atual_brl <= gasto_anterior:
-            st.success(t["msg_sucesso"])
-        else:
-            st.warning(t["msg_alerta"])
-
     if st.session_state.tocar_som:
         reproduzir_bip()
         st.session_state.tocar_som = False
@@ -502,58 +493,91 @@ with tab_scanner:
                 st.success(t["item_add"])
                 st.rerun()
 
-# --- ABA 2: COMPRAS ---
+# --- ABA 2: COMPRAS (CARRINHO + HISTÓRICO + TELA GRÁFICA) ---
 with tab_compras:
-    st.subheader(t["carrinho_secao"])
-    
-    if len(st.session_state.carrinho) == 0:
-        st.info(t["carrinho_vazio"])
-    else:
-        total_brl = sum(item["preco_brl"] * item["quantidade"] for item in st.session_state.carrinho)
+    # SE A TELA GRÁFICA ESTIVER ATIVA, ABRE UMA NOVA TELA COMPLETA
+    if st.session_state.tela_grafico:
+        st.subheader("📊 Comparativo de Gastos por Período")
         
-        for idx, item in enumerate(st.session_state.carrinho):
-            col_item, col_btn = st.columns([3, 1])
-            with col_item:
-                st.write(f"**{item['quantidade']}x {item['nome']}** — {fmt_moeda(item['preco_brl'] * item['quantidade'])}")
-                st.caption(f"Cód: {item['codigo']}")
-            with col_btn:
-                if st.button("🗑️", key=f"del_{idx}"):
-                    st.session_state.carrinho.pop(idx)
-                    st.rerun()
-            st.divider()
-            
-        st.metric(label=t["total_compra"], value=fmt_moeda(total_brl))
-        
-        if st.button(t["finalizar"], width="stretch", type="primary"):
-            agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
-            st.session_state.gasto_atual_brl += total_brl
-            
-            st.session_state.historico_compras.insert(0, {
-                "data": agora,
-                "total_brl": total_brl,
-                "itens_qtd": sum(i["quantidade"] for i in st.session_state.carrinho)
-            })
-            
-            st.session_state.carrinho = []
-            st.success(t["compra_feita"])
+        dados_grafico = []
+        for p in st.session_state.historico_periodos[-3:]:
+            dados_grafico.append({"Período": p["periodo"], "Gasto": p["total_brl"] * cotacoes.get(st.session_state.moeda, 1.0)})
+        dados_grafico.append({"Período": "Atual", "Gasto": st.session_state.gasto_atual_brl * cotacoes.get(st.session_state.moeda, 1.0)})
+
+        df_grafico = pd.DataFrame(dados_grafico).set_index("Período")
+        st.bar_chart(df_grafico, use_container_width=True)
+
+        gasto_anterior = st.session_state.historico_periodos[-1]["total_brl"] if len(st.session_state.historico_periodos) > 0 else 0
+        if st.session_state.gasto_atual_brl <= gasto_anterior:
+            st.success(t["msg_sucesso"])
+        else:
+            st.warning(t["msg_alerta"])
+
+        st.divider()
+        if st.button(t["voltar_historico"], width="stretch"):
+            st.session_state.tela_grafico = False
             st.rerun()
 
-    st.divider()
-
-    st.subheader(t["historico_secao"])
-    
-    if len(st.session_state.historico_compras) == 0:
-        st.caption(t["historico_vazio"])
     else:
-        for idx_h, compra in enumerate(st.session_state.historico_compras):
-            st.markdown('<div class="history-card">', unsafe_allow_html=True)
-            col_h1, col_h2 = st.columns([2, 1])
-            with col_h1:
-                st.markdown(f"🗓️ **{compra['data']}**")
-                st.caption(f"{compra['itens_qtd']} {t['itens_label']}")
-            with col_h2:
-                st.markdown(f"**{fmt_moeda(compra['total_brl'])}**")
-            st.markdown('</div>', unsafe_allow_html=True)
+        # 1. SEÇÃO DO CARRINHO
+        st.subheader(t["carrinho_secao"])
+        
+        if len(st.session_state.carrinho) == 0:
+            st.info(t["carrinho_vazio"])
+        else:
+            total_brl = sum(item["preco_brl"] * item["quantidade"] for item in st.session_state.carrinho)
+            
+            for idx, item in enumerate(st.session_state.carrinho):
+                col_item, col_btn = st.columns([3, 1])
+                with col_item:
+                    st.write(f"**{item['quantidade']}x {item['nome']}** — {fmt_moeda(item['preco_brl'] * item['quantidade'])}")
+                    st.caption(f"Cód: {item['codigo']}")
+                with col_btn:
+                    if st.button("🗑️", key=f"del_{idx}"):
+                        st.session_state.carrinho.pop(idx)
+                        st.rerun()
+                st.divider()
+                
+            st.metric(label=t["total_compra"], value=fmt_moeda(total_brl))
+            
+            if st.button(t["finalizar"], width="stretch", type="primary"):
+                agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+                st.session_state.gasto_atual_brl += total_brl
+                
+                st.session_state.historico_compras.insert(0, {
+                    "data": agora,
+                    "total_brl": total_brl,
+                    "itens_qtd": sum(i["quantidade"] for i in st.session_state.carrinho)
+                })
+                
+                st.session_state.carrinho = []
+                st.success(t["compra_feita"])
+                st.rerun()
+
+        st.divider()
+
+        # 2. SEÇÃO DO HISTÓRICO DE COMPRAS
+        st.subheader(t["historico_secao"])
+        
+        # Botão para ABRIR A NOVA TELA DO GRÁFICO
+        if st.button(t["ver_grafico"], width="stretch"):
+            st.session_state.tela_grafico = True
+            st.rerun()
+
+        st.caption("")
+
+        if len(st.session_state.historico_compras) == 0:
+            st.caption(t["historico_vazio"])
+        else:
+            for idx_h, compra in enumerate(st.session_state.historico_compras):
+                st.markdown('<div class="history-card">', unsafe_allow_html=True)
+                col_h1, col_h2 = st.columns([2, 1])
+                with col_h1:
+                    st.markdown(f"🗓️ **{compra['data']}**")
+                    st.caption(f"{compra['itens_qtd']} {t['itens_label']}")
+                with col_h2:
+                    st.markdown(f"**{fmt_moeda(compra['total_brl'])}**")
+                st.markdown('</div>', unsafe_allow_html=True)
 
 # --- ABA 3: PERFIL ---
 with tab_perfil:
