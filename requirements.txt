@@ -9,3 +9,5 @@ pyzbar
 customtkinter
 Pillow
 openpyxl
+fastapi
+uvicorn
